@@ -1,0 +1,2 @@
+../Core/Src/logger.c:13:6:logger_init	1
+../Core/Src/logger.c:20:6:logger_log	1

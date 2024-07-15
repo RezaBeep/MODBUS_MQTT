@@ -1,0 +1,5 @@
+../Core/Src/modbus.c:15:6:_null	1
+../Core/Src/modbus.c:21:6:MODBUS_MASTER_init	1
+../Core/Src/modbus.c:33:6:MODBUS_MASTER_request	1
+../Core/Src/modbus.c:54:17:MODBUS_MASTER_response_handler	3
+../Core/Src/modbus.c:96:6:MODBUS_MASTER_read_coils	1
