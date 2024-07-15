@@ -135,12 +135,16 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 		MODBUS_MASTER_exception exception = {0};
 
 		if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_OK){
-			oled_printl(&oled, "MODBUS_RES_OK");
 			uint8_t* register_data = normal_res.register_data;
-
-			sprintf(mqtt_payload_buff, "0x%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
+			if(!register_data){
+				oled_printl(&oled, "register NULL");
+			}
+			else{
+				oled_printl(&oled, "MODBUS_RES_OK");
+			}
+//			sprintf(mqtt_payload_buff, "0x%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
 			// now publish the data
-			mqtt_publish_string(&mqtt_conn, "0", "0", "stm32/plc/register0", mqtt_payload_buff);
+			mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "test");
 			oled_printl(&oled, "published");
 		}
 		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
