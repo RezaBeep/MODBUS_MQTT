@@ -46,7 +46,7 @@ void MODBUS_MASTER_request(MODBUS_MASTER_InitTypeDef *pMaster, uint8_t slave_add
 
 
 	HAL_UART_Transmit_IT(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE);
-	HAL_UARTEx_ReceiveToIdle_IT(pMaster->huart, pMaster->pchRxBuffer, rx_size);
+	HAL_UARTEx_ReceiveToIdle_DMA(pMaster->huart, pMaster->pchRxBuffer, rx_size);
 }
 
 
@@ -81,7 +81,7 @@ modbus_res_type MODBUS_MASTER_response_handler(
 			pNormalRes->crc = pMaster->pchRxBuffer + 3 + pNormalRes->byte_count;
 
 			//clear crc from response
-			strcpy(pNormalRes->crc, "");
+//			strcpy(pNormalRes->crc, "");
 
 			return MODBUS_RES_OK;
 		}

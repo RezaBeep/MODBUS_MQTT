@@ -22,6 +22,7 @@
 #include "rtc.h"
 #include "usart.h"
 #include "gpio.h"
+#include "dma.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -186,6 +187,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_I2C1_Init();
   MX_RTC_Init();
   MX_USART1_UART_Init();
@@ -304,14 +306,17 @@ bool setup(){
 		  oled_printl(&oled, "gprs registered");
 	  }
 	  while(sim.state < SIM_STATE_CGREG_OK){}
-	  // gprs disconnect
-	  if(!sim_gprs_disconnect(&sim)){
-		  oled_printl(&oled, "gprs disconnected already!");
-	  }
+
 	  //mqtt disconnect
 	  if(!mqtt_disconnect(&mqtt_conn)){
 	  	  oled_printl(&oled, "broker disconnect error!");
 	   }
+
+
+	  // gprs disconnect
+	  if(!sim_gprs_disconnect(&sim)){
+		  oled_printl(&oled, "gprs disconnected already!");
+	  }
 
 	  HAL_Delay(5000);
 	  if(sim_gprs_connect(&sim)){

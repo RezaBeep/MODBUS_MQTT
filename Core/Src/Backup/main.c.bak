@@ -18,12 +18,10 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "dma.h"
 #include "i2c.h"
 #include "rtc.h"
 #include "usart.h"
 #include "gpio.h"
-#include "stdbool.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -76,7 +74,6 @@ char modbus_tx_buff[MODBUS_TX_SIZE];
 char modbus_rx_buff[MODBUS_RX_SIZE];
 char mqtt_payload_buff[MQTT_PAYLOAD_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
-
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -189,7 +186,6 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_I2C1_Init();
   MX_RTC_Init();
   MX_USART1_UART_Init();
