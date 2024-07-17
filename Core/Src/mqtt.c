@@ -16,6 +16,7 @@ char* smconn = "SMCONN";
 char* smpub = "SMPUB";
 char* smstate= "SMSTATE";
 char* smdisc= "SMDISC";
+char* smpubhex = "SMPUBHEX";
 
 
 
@@ -122,6 +123,56 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 	}
 	return false;
 }
+
+
+
+
+bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload){
+	if(pMqttConn->connected){
+		if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpubhex, MQTT_AT_MIN_TIMEOUT, 1, "1")){
+			uint8_t content_length = strlen(payload);
+			char true_payload[content_length+1];
+			char byte_size[4];
+			if(content_length % 2 != 0){
+				sprintf(true_payload, "%s0", payload);
+				sprintf(byte_size, "%d", (content_length+1)/2);
+			}
+			else{
+				strcpy(true_payload, payload);
+				sprintf(byte_size, "%d", content_length/2);
+			}
+
+			if(pMqttConn->connected){
+				if(at_write_blocking(
+						pMqttConn->sim->huart,
+						mqtt_rx_buff,
+						smpub,
+						MQTT_AT_MIN_TIMEOUT,
+						8,
+						"\"",
+						topic,
+						"\",\"",
+						byte_size,
+						"\",",
+						qos,
+						",",
+						retain) == AT_STATE_ENTER_INPUT)
+				{
+
+
+					HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), MQTT_AT_MIN_TIMEOUT);
+					HAL_UART_Transmit_IT(pMqttConn->sim->huart, "\n" , 1);
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+
+
+
 
 
 

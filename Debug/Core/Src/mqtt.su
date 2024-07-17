@@ -1,6 +1,7 @@
-../Core/Src/mqtt.c:31:6:mqtt_init	24	static
-../Core/Src/mqtt.c:56:6:mqtt_connect	48	static
-../Core/Src/mqtt.c:80:6:mqtt_disconnect	16	static
-../Core/Src/mqtt.c:92:6:mqtt_publish_string	112	dynamic
-../Core/Src/mqtt.c:128:6:mqtt_conn_status	16	static
-../Core/Src/mqtt.c:147:6:mqtt_event_handler	16	static
+../Core/Src/mqtt.c:32:6:mqtt_init	24	static
+../Core/Src/mqtt.c:57:6:mqtt_connect	48	static
+../Core/Src/mqtt.c:81:6:mqtt_disconnect	16	static
+../Core/Src/mqtt.c:93:6:mqtt_publish_string	112	dynamic
+../Core/Src/mqtt.c:130:6:mqtt_publish_hex	104	dynamic
+../Core/Src/mqtt.c:179:6:mqtt_conn_status	16	static
+../Core/Src/mqtt.c:198:6:mqtt_event_handler	16	static

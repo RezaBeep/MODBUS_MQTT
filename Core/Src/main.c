@@ -145,7 +145,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 			else{
 				oled_printl(&oled, "MODBUS_RES_OK");
 			}
-			sprintf(mqtt_payload_buff, "0x%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
+			sprintf(mqtt_payload_buff, "%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
 			// now publish the data
 			ready_to_send = true;
 		}
@@ -359,7 +359,7 @@ bool setup(){
 
 void publish(char* topic, char* payload){
 	if(ready_to_send){
-		mqtt_publish_string(&mqtt_conn, "0", "0", topic, payload);
+		mqtt_publish_hex(&mqtt_conn, "0", "0", topic, payload);
 		oled_printl(&oled, "published");
 		ready_to_send = false;
 	}
