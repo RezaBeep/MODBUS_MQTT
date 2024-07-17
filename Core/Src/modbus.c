@@ -77,11 +77,16 @@ modbus_res_type MODBUS_MASTER_response_handler(
 			pNormalRes->slave_addr = pMaster->pchRxBuffer[0];
 			pNormalRes->function_code = pMaster->pchRxBuffer[1];
 			pNormalRes->byte_count = pMaster->pchRxBuffer[2];
-			pNormalRes->register_data = pMaster->pchRxBuffer+3;	// Last 2 bytes are CRC
-			pNormalRes->crc = pMaster->pchRxBuffer + 3 + pNormalRes->byte_count;
+
+			uint8_t byte_cnt = pNormalRes->byte_count;
+			pNormalRes->crc = pMaster->pchRxBuffer + 3 + byte_cnt;
+			memset(pMaster->pchRxBuffer+3+byte_cnt, 0, strlen(pNormalRes->crc));	// remove crc from rxBuff
+
+			pNormalRes->register_data = pMaster->pchRxBuffer+3;
+
 
 			//clear crc from response
-//			strcpy(pNormalRes->crc, "");
+
 
 			return MODBUS_RES_OK;
 		}

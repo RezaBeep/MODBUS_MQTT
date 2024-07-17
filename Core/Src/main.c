@@ -75,6 +75,8 @@ char modbus_tx_buff[MODBUS_TX_SIZE];
 char modbus_rx_buff[MODBUS_RX_SIZE];
 char mqtt_payload_buff[MQTT_PAYLOAD_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
+
+static bool ready_to_send = false;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -83,6 +85,7 @@ char oled_buff[OLED_BUFF_SIZE];
 void SystemClock_Config(void);
 bool setup();
 void repeative_task();
+void publish(char* topic, char* payload);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -142,10 +145,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 			else{
 				oled_printl(&oled, "MODBUS_RES_OK");
 			}
-//			sprintf(mqtt_payload_buff, "0x%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
+			sprintf(mqtt_payload_buff, "0x%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
 			// now publish the data
-			mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "test");
-			oled_printl(&oled, "published");
+			ready_to_send = true;
 		}
 		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
 			oled_printl(&oled, "MODBUS_RES_EXCEPTION");
@@ -205,6 +207,7 @@ int main(void)
 
 setup:
   if(setup()){
+	  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
 	  repeative_task();
 	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
   }
@@ -222,7 +225,7 @@ setup:
   while (1)
   {
     /* USER CODE END WHILE */
-
+	  publish("stm32/", mqtt_payload_buff);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -354,6 +357,14 @@ bool setup(){
 
 
 
+void publish(char* topic, char* payload){
+	if(ready_to_send){
+		mqtt_publish_string(&mqtt_conn, "0", "0", topic, payload);
+		oled_printl(&oled, "published");
+		ready_to_send = false;
+	}
+
+}
 /* USER CODE END 4 */
 
 /**

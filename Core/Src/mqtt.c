@@ -95,8 +95,21 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 		char content_len[5];
 		sprintf(content_len, "%d", content_length);
 		if(pMqttConn->connected){
-			if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpub, MQTT_AT_MIN_TIMEOUT, 8, "\"", topic, "\",\"",
-					content_len, "\",", qos, ",", retain) == AT_STATE_ENTER_INPUT){
+			if(at_write_blocking(
+					pMqttConn->sim->huart,
+					mqtt_rx_buff,
+					smpub,
+					MQTT_AT_MIN_TIMEOUT,
+					8,
+					"\"",
+					topic,
+					"\",\"",
+					content_len,
+					"\",",
+					qos,
+					",",
+					retain) == AT_STATE_ENTER_INPUT)
+			{
 				char msg[content_length+5];
 //				sprintf(msg, "%s\x1A\r\n", payload);
 				sprintf(msg, "%s", payload);

@@ -1,5 +1,5 @@
 ../Core/Src/modbus.c:15:6:_null	16	static
 ../Core/Src/modbus.c:21:6:MODBUS_MASTER_init	24	static
 ../Core/Src/modbus.c:33:6:MODBUS_MASTER_request	24	static
-../Core/Src/modbus.c:54:17:MODBUS_MASTER_response_handler	32	static
-../Core/Src/modbus.c:96:6:MODBUS_MASTER_read_coils	32	static
+../Core/Src/modbus.c:54:17:MODBUS_MASTER_response_handler	40	static
+../Core/Src/modbus.c:101:6:MODBUS_MASTER_read_coils	32	static
