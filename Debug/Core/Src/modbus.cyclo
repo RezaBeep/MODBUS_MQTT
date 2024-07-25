@@ -3,3 +3,6 @@
 ../Core/Src/modbus.c:33:6:MODBUS_MASTER_request	1
 ../Core/Src/modbus.c:54:17:MODBUS_MASTER_response_handler	3
 ../Core/Src/modbus.c:101:6:MODBUS_MASTER_read_coils	1
+../Core/Src/modbus.c:109:6:MODBUS_MASTER_read_input_reg	1
+../Core/Src/modbus.c:120:6:MODBUS_MASTER_read_holding_reg	1
+../Core/Src/modbus.c:132:6:MODBUS_MASTER_read_discrete_input	1

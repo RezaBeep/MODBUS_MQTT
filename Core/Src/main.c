@@ -18,11 +18,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
+#include "dma.h"
 #include "i2c.h"
 #include "rtc.h"
 #include "usart.h"
 #include "gpio.h"
-#include "dma.h"
+#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -44,10 +46,17 @@
 #define MODBUS_TX_SIZE	8
 #define MODBUS_RX_SIZE	64
 #define MODBUS_SLAVE_ADDR	57
+#define MODBUS_COIL_ADDR_STEP	16
+#define MODBUS_REG_ADDR_STEP	1
+#define MODBUS_ADDR_COIL_MAX	30
+#define MODBUS_ADDR_HOLDING_REG_MAX		30
+#define MODBUS_ADDR_INPUT_REG_MAX	30
+#define MODBUS_ADDR_DISCRETE_INPUT_MAX	30
+
 
 #define MQTT_KEEPTIME	"60"
 #define MQTT_PAYLOAD_BUFF_SIZE	20
-
+#define MQTT_TOPIC_BUFF_SIZE	50
 
 #define REPEAT_DELAY	10
 
@@ -58,6 +67,12 @@
 
 const UART_HandleTypeDef* PHUART_SIM = &huart1;
 const UART_HandleTypeDef* PHUART_MODBUS = &huart2;
+
+
+const char* topic_coil = "MCU/COIL/";
+const char* topic_holding_reg = "MCU/HOLDING_REG/";
+const char* topic_discrete_input = "MCU/DISCRETE_INPUT/";
+const char* topic_input_reg = "MCU/INPUT_REG/";
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,6 +81,19 @@ const UART_HandleTypeDef* PHUART_MODBUS = &huart2;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+osThreadId_t repeativeTaskHandle;
+const osThreadAttr_t repeativeTask_attributes = {
+  .name = "repeativeTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+
+
+osSemaphoreId_t mySemHandle;
+
+
+
 sim_t sim;
 oled_t oled;
 mqtt_conn_t mqtt_conn;
@@ -74,18 +102,28 @@ MODBUS_MASTER_InitTypeDef master;
 char modbus_tx_buff[MODBUS_TX_SIZE];
 char modbus_rx_buff[MODBUS_RX_SIZE];
 char mqtt_payload_buff[MQTT_PAYLOAD_BUFF_SIZE];
+char mqtt_topic_buff[MQTT_TOPIC_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
 
-static bool ready_to_send = false;
+bool coil_ready_to_send = false;
+bool discrete_in_ready_to_send = false;
+bool input_reg_ready_to_send = false;
+bool holding_reg_ready_to_send = false;
+MODBUS_MASTER_res* modbus_res;
+uint16_t modbus_coil_addr = 0;
+uint16_t modbus_holding_reg_addr = 4097;
+uint16_t modbus_discrete_input_addr = 0;
+uint16_t modbus_input_reg_addr = 0;
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
+void MX_FREERTOS_Init(void);
+
 bool setup();
-void repeative_task();
-void publish(char* topic, char* payload);
+void repeative_task(void *args);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -94,8 +132,8 @@ void publish(char* topic, char* payload);
 /* USER CODE BEGIN 0 */
 void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc){
 	rtc_set_alarm_seconds_it(hrtc, REPEAT_DELAY);
-	repeative_task();
-	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
+//	repeative_task();
+//	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
 
 }
 
@@ -143,11 +181,23 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 				oled_printl(&oled, "register NULL");
 			}
 			else{
+				if(normal_res.function_code == 1){
+					coil_ready_to_send = true;
+				}
+				else if(normal_res.function_code == 2){
+					discrete_in_ready_to_send = true;
+				}
+				else if(normal_res.function_code == 3){
+					holding_reg_ready_to_send = true;
+				}
+				else if(normal_res.function_code == 4){
+					input_reg_ready_to_send = true;
+				}
+
+				modbus_res = &normal_res;
+				sprintf(mqtt_payload_buff, "%04X", (uint16_t)((register_data[0]<<8) | register_data[1]));
 				oled_printl(&oled, "MODBUS_RES_OK");
 			}
-			sprintf(mqtt_payload_buff, "%X", (uint16_t)((register_data[0]<<8) | register_data[1]));
-			// now publish the data
-			ready_to_send = true;
 		}
 		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
 			oled_printl(&oled, "MODBUS_RES_EXCEPTION");
@@ -208,8 +258,8 @@ int main(void)
 setup:
   if(setup()){
 	  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
-	  repeative_task();
-	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
+//	  repeative_task();
+//	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
   }
   else{
 	  oled_printl(&oled, "sim reboot");
@@ -220,12 +270,26 @@ setup:
 
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* Call init function for freertos objects (in cmsis_os2.c) */
+  MX_FREERTOS_Init();
+
+  mySemHandle = osSemaphoreNew(1, 1, NULL);
+  repeativeTaskHandle = osThreadNew(repeative_task, NULL, &repeativeTask_attributes);
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
     /* USER CODE END WHILE */
-	  publish("stm32/", mqtt_payload_buff);
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -280,8 +344,45 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
-void repeative_task(){
-	MODBUS_MASTER_read_coils(&master, MODBUS_SLAVE_ADDR, 0, 5);
+void repeative_task(void *args){
+
+	while(1){
+//		MODBUS_MASTER_read_coils(&master, MODBUS_SLAVE_ADDR, modbus_coil_addr, MODBUS_COIL_ADDR_STEP);
+//		for(uint8_t i=0;i<2;i++){
+//			if(coil_ready_to_send){
+//				sprintf(mqtt_topic_buff, "%s%d", topic_coil, modbus_coil_addr);
+//				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
+//					oled_printl(&oled, "Failed to publish");
+//				}
+//				else{
+//					oled_printl(&oled, "published");
+//					modbus_coil_addr += MODBUS_COIL_ADDR_STEP;
+//					MODBUS_MASTER_read_coils(&master, MODBUS_SLAVE_ADDR, modbus_coil_addr, MODBUS_COIL_ADDR_STEP);
+//				}
+//				coil_ready_to_send = false;
+//			}
+//			osDelay(pdMS_TO_TICKS(1000));
+//		}
+//		modbus_coil_addr = 0;
+
+		MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
+		for(uint8_t i=0;i<3;i++){
+			if(holding_reg_ready_to_send){
+				sprintf(mqtt_topic_buff, "%s%d", topic_holding_reg, modbus_holding_reg_addr);
+				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
+					oled_printl(&oled, "Failed to publish");
+				}
+				else{
+					oled_printl(&oled, "published");
+					modbus_holding_reg_addr += MODBUS_REG_ADDR_STEP;
+					MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
+				}
+				holding_reg_ready_to_send = false;
+			}
+			osDelay(pdMS_TO_TICKS(1000));
+		}
+		modbus_holding_reg_addr = 4097;
+	}
 }
 
 
@@ -289,7 +390,7 @@ void repeative_task(){
 
 bool setup(){
 	  oled_printl(&oled, "Please wait");
-	  HAL_Delay(15000);
+//	  HAL_Delay(15000);
 	  oled_printl(&oled, "sending AT..");
 	  if(sim_test_at(&sim)){
 		  oled_printl(&oled, "AT OK!");
@@ -325,7 +426,7 @@ bool setup(){
 		  oled_printl(&oled, "gprs disconnected already!");
 	  }
 
-	  HAL_Delay(5000);
+//	  HAL_Delay(5000);
 	  if(sim_gprs_connect(&sim)){
 	//	  sim_event_listen_once(&sim);
 		  uint8_t i = 0;
@@ -358,11 +459,7 @@ bool setup(){
 
 
 void publish(char* topic, char* payload){
-	if(ready_to_send){
-		mqtt_publish_hex(&mqtt_conn, "0", "0", topic, payload);
-		oled_printl(&oled, "published");
-		ready_to_send = false;
-	}
+
 
 }
 /* USER CODE END 4 */

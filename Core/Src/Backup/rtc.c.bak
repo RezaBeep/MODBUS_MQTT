@@ -87,8 +87,8 @@ void MX_RTC_Init(void)
 //    Error_Handler();
 //  }
 //  /* USER CODE BEGIN RTC_Init 2 */
-
-  /* USER CODE END RTC_Init 2 */
+//
+//  /* USER CODE END RTC_Init 2 */
 
 }
 

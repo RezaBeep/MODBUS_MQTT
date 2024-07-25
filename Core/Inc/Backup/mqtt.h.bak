@@ -49,7 +49,7 @@ void mqtt_init(
 bool mqtt_connect(mqtt_conn_t* pMqttConn);
 bool mqtt_disconnect(mqtt_conn_t* pMqttConn);
 bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload);
-bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char qos, char retain, char* topic, char* payload);
+bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload);
 bool mqtt_conn_status(mqtt_conn_t* pMqttConn);
 void mqtt_event_handler(mqtt_conn_t* pMqttConn, char* event_buff);
 

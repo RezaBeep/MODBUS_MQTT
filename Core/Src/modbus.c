@@ -101,3 +101,45 @@ modbus_res_type MODBUS_MASTER_response_handler(
 void MODBUS_MASTER_read_coils(MODBUS_MASTER_InitTypeDef *pMaster, uint8_t slave_addr, uint16_t register_addr, uint16_t number_of_points){
 	MODBUS_MASTER_request(pMaster, slave_addr, 1, register_addr, number_of_points);
 }
+
+
+
+
+
+void MODBUS_MASTER_read_input_reg(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		uint16_t number_of_points)
+{
+	MODBUS_MASTER_request(pMaster, slave_addr, 4, register_addr, number_of_points);
+}
+
+
+
+void MODBUS_MASTER_read_holding_reg(
+		MODBUS_MASTER_InitTypeDef* pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		uint16_t number_of_points)
+{
+	MODBUS_MASTER_request(pMaster, slave_addr, 3, register_addr, number_of_points);
+}
+
+
+
+
+void MODBUS_MASTER_read_discrete_input(
+		MODBUS_MASTER_InitTypeDef* pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		uint16_t number_of_points)
+{
+	MODBUS_MASTER_request(pMaster, slave_addr, 2, register_addr, number_of_points);
+}
+
+
+
+
+
+

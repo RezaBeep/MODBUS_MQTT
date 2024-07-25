@@ -161,7 +161,7 @@ bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* top
 
 
 					HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), MQTT_AT_MIN_TIMEOUT);
-					HAL_UART_Transmit_IT(pMqttConn->sim->huart, "\n" , 1);
+					HAL_UART_Transmit(pMqttConn->sim->huart, "\n" , 1, 200);
 					return true;
 				}
 			}
