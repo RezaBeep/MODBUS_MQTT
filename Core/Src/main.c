@@ -57,6 +57,9 @@
 #define MQTT_KEEPTIME	"60"
 #define MQTT_PAYLOAD_BUFF_SIZE	20
 #define MQTT_TOPIC_BUFF_SIZE	50
+#define MQTT_BROKER_ADDR	"5.198.179.50"
+#define MQTT_BROKER_PORT	"1883"
+#define MQTT_CLIENT_ID		"STM32_GATEWAY"
 
 #define REPEAT_DELAY	10
 
@@ -112,7 +115,7 @@ bool holding_reg_ready_to_send = false;
 MODBUS_MASTER_res* modbus_res;
 uint16_t modbus_coil_addr = 0;
 uint16_t modbus_holding_reg_addr = 4097;
-uint16_t modbus_discrete_input_addr = 0;
+uint16_t modbus_discrete_input_addr = 1025;
 uint16_t modbus_input_reg_addr = 0;
 /* USER CODE BEGIN PV */
 
@@ -251,7 +254,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   oled_init(&oled, &hi2c1);
   sim_init(&sim, PHUART_SIM, "mtnirancell", "", "");
-  mqtt_init(&mqtt_conn, &sim, "stm32", "185.165.30.166", "1883", "", "", MQTT_KEEPTIME);
+  mqtt_init(&mqtt_conn, &sim, "STM32_GATEWAY", "5.198.179.50", "1883", "", "", MQTT_KEEPTIME);
   MODBUS_MASTER_init(&master, PHUART_MODBUS, modbus_tx_buff, modbus_rx_buff);
 
 
@@ -347,23 +350,23 @@ void SystemClock_Config(void)
 void repeative_task(void *args){
 
 	while(1){
-//		MODBUS_MASTER_read_coils(&master, MODBUS_SLAVE_ADDR, modbus_coil_addr, MODBUS_COIL_ADDR_STEP);
-//		for(uint8_t i=0;i<2;i++){
-//			if(coil_ready_to_send){
-//				sprintf(mqtt_topic_buff, "%s%d", topic_coil, modbus_coil_addr);
-//				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
-//					oled_printl(&oled, "Failed to publish");
-//				}
-//				else{
-//					oled_printl(&oled, "published");
-//					modbus_coil_addr += MODBUS_COIL_ADDR_STEP;
-//					MODBUS_MASTER_read_coils(&master, MODBUS_SLAVE_ADDR, modbus_coil_addr, MODBUS_COIL_ADDR_STEP);
-//				}
-//				coil_ready_to_send = false;
-//			}
-//			osDelay(pdMS_TO_TICKS(1000));
-//		}
-//		modbus_coil_addr = 0;
+		MODBUS_MASTER_read_discrete_input(&master, MODBUS_SLAVE_ADDR, modbus_discrete_input_addr, MODBUS_COIL_ADDR_STEP);
+		for(uint8_t i=0;i<2;i++){
+			if(discrete_in_ready_to_send){
+				sprintf(mqtt_topic_buff, "%s%d", topic_discrete_input, modbus_discrete_input_addr);
+				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
+					oled_printl(&oled, "Failed to publish");
+				}
+				else{
+					oled_printl(&oled, "published");
+					modbus_discrete_input_addr += MODBUS_COIL_ADDR_STEP;
+					MODBUS_MASTER_read_discrete_input(&master, MODBUS_SLAVE_ADDR, modbus_discrete_input_addr, MODBUS_COIL_ADDR_STEP);
+				}
+				discrete_in_ready_to_send = false;
+			}
+			osDelay(pdMS_TO_TICKS(1000));
+		}
+		modbus_discrete_input_addr = 1025;
 
 		MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
 		for(uint8_t i=0;i<3;i++){
