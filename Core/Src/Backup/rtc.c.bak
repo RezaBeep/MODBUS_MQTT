@@ -86,9 +86,9 @@ void MX_RTC_Init(void)
 //  {
 //    Error_Handler();
 //  }
-//  /* USER CODE BEGIN RTC_Init 2 */
+  /* USER CODE BEGIN RTC_Init 2 */
 //
-//  /* USER CODE END RTC_Init 2 */
+  /* USER CODE END RTC_Init 2 */
 
 }
 
@@ -107,9 +107,9 @@ void HAL_RTC_MspInit(RTC_HandleTypeDef* rtcHandle)
     __HAL_RCC_RTC_ENABLE();
 
     /* RTC interrupt Init */
-    HAL_NVIC_SetPriority(RTC_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(RTC_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(RTC_IRQn);
-    HAL_NVIC_SetPriority(RTC_Alarm_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(RTC_Alarm_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(RTC_Alarm_IRQn);
   /* USER CODE BEGIN RTC_MspInit 1 */
 

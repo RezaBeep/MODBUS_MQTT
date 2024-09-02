@@ -21,10 +21,8 @@
 #include "cmsis_os.h"
 #include "dma.h"
 #include "i2c.h"
-#include "rtc.h"
 #include "usart.h"
 #include "gpio.h"
-#include <stdio.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -32,7 +30,6 @@
 #include "sim.h"
 #include "oled.h"
 #include "modbus.h"
-#include "rtc_delay.h"
 
 /* USER CODE END Includes */
 
@@ -84,19 +81,6 @@ const char* topic_input_reg = "MCU/INPUT_REG/";
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-osThreadId_t repeativeTaskHandle;
-const osThreadAttr_t repeativeTask_attributes = {
-  .name = "repeativeTask",
-  .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
-
-
-osSemaphoreId_t mySemHandle;
-
-
-
 sim_t sim;
 oled_t oled;
 mqtt_conn_t mqtt_conn;
@@ -114,8 +98,8 @@ bool input_reg_ready_to_send = false;
 bool holding_reg_ready_to_send = false;
 MODBUS_MASTER_res* modbus_res;
 uint16_t modbus_coil_addr = 0;
-uint16_t modbus_holding_reg_addr = 4097;
-uint16_t modbus_discrete_input_addr = 1025;
+uint16_t modbus_holding_reg_addr = 0;
+uint16_t modbus_discrete_input_addr = 0;
 uint16_t modbus_input_reg_addr = 0;
 /* USER CODE BEGIN PV */
 
@@ -133,12 +117,7 @@ void repeative_task(void *args);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_RTC_AlarmAEventCallback(RTC_HandleTypeDef *hrtc){
-	rtc_set_alarm_seconds_it(hrtc, REPEAT_DELAY);
-//	repeative_task();
-//	HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_1);
 
-}
 
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
@@ -248,9 +227,9 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_I2C1_Init();
-  MX_RTC_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
   oled_init(&oled, &hi2c1);
   sim_init(&sim, PHUART_SIM, "mtnirancell", "", "");
@@ -279,9 +258,6 @@ setup:
   /* Call init function for freertos objects (in cmsis_os2.c) */
   MX_FREERTOS_Init();
 
-  mySemHandle = osSemaphoreNew(1, 1, NULL);
-  repeativeTaskHandle = osThreadNew(repeative_task, NULL, &repeativeTask_attributes);
-
   /* Start scheduler */
   osKernelStart();
 
@@ -306,7 +282,6 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -333,12 +308,6 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_HSE_DIV128;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }

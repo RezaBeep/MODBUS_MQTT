@@ -56,10 +56,11 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
-extern RTC_HandleTypeDef hrtc;
 extern DMA_HandleTypeDef hdma_usart2_rx;
+extern DMA_HandleTypeDef hdma_usart3_rx;
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart2;
+extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -185,17 +186,17 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
-  * @brief This function handles RTC global interrupt.
+  * @brief This function handles DMA1 channel3 global interrupt.
   */
-void RTC_IRQHandler(void)
+void DMA1_Channel3_IRQHandler(void)
 {
-  /* USER CODE BEGIN RTC_IRQn 0 */
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
 
-  /* USER CODE END RTC_IRQn 0 */
-  HAL_RTCEx_RTCIRQHandler(&hrtc);
-  /* USER CODE BEGIN RTC_IRQn 1 */
+  /* USER CODE END DMA1_Channel3_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart3_rx);
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
 
-  /* USER CODE END RTC_IRQn 1 */
+  /* USER CODE END DMA1_Channel3_IRQn 1 */
 }
 
 /**
@@ -241,17 +242,17 @@ void USART2_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles RTC alarm interrupt through EXTI line 17.
+  * @brief This function handles USART3 global interrupt.
   */
-void RTC_Alarm_IRQHandler(void)
+void USART3_IRQHandler(void)
 {
-  /* USER CODE BEGIN RTC_Alarm_IRQn 0 */
+  /* USER CODE BEGIN USART3_IRQn 0 */
 
-  /* USER CODE END RTC_Alarm_IRQn 0 */
-  HAL_RTC_AlarmIRQHandler(&hrtc);
-  /* USER CODE BEGIN RTC_Alarm_IRQn 1 */
+  /* USER CODE END USART3_IRQn 0 */
+  HAL_UART_IRQHandler(&huart3);
+  /* USER CODE BEGIN USART3_IRQn 1 */
 
-  /* USER CODE END RTC_Alarm_IRQn 1 */
+  /* USER CODE END USART3_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
