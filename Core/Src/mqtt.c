@@ -14,6 +14,7 @@
 char* smconf = "SMCONF";
 char* smconn = "SMCONN";
 char* smpub = "SMPUB";
+char* smsub = "SMSUB";
 char* smstate= "SMSTATE";
 char* smdisc= "SMDISC";
 char* smpubhex = "SMPUBHEX";
@@ -91,33 +92,33 @@ bool mqtt_disconnect(mqtt_conn_t* pMqttConn){
 
 
 bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload){
-	if(pMqttConn->connected){
-		uint8_t content_length = strlen(payload);
-		char content_len[5];
-		sprintf(content_len, "%d", content_length);
+	if(pMqttConn->sim->app_network){
 		if(pMqttConn->connected){
+			uint8_t content_length = strlen(payload);
+			char content_len[5];
+			sprintf(content_len, "%d", content_length);
 			if(at_write_blocking(
-					pMqttConn->sim->huart,
-					mqtt_rx_buff,
-					smpub,
-					MQTT_AT_MIN_TIMEOUT,
-					8,
-					"\"",
-					topic,
-					"\",\"",
-					content_len,
-					"\",",
-					qos,
-					",",
-					retain) == AT_STATE_ENTER_INPUT)
-			{
-				char msg[content_length+5];
-//				sprintf(msg, "%s\x1A\r\n", payload);
-				sprintf(msg, "%s", payload);
-				HAL_UART_Transmit(pMqttConn->sim->huart, msg , strlen(msg), MQTT_AT_MIN_TIMEOUT);
-				sprintf(msg, "%c", (char) 26);
-				HAL_UART_Transmit_IT(pMqttConn->sim->huart, msg , strlen(msg));
-				return true;
+						pMqttConn->sim->huart,
+						mqtt_rx_buff,
+						smpub,
+						MQTT_AT_MIN_TIMEOUT,
+						8,
+						"\"",
+						topic,
+						"\",\"",
+						content_len,
+						"\",",
+						qos,
+						",",
+						retain) == AT_STATE_ENTER_INPUT)
+				{
+					char msg[content_length+5];
+	//				sprintf(msg, "%s\x1A\r\n", payload);
+					sprintf(msg, "%s", payload);
+					HAL_UART_Transmit(pMqttConn->sim->huart, msg , strlen(msg), MQTT_AT_MIN_TIMEOUT);
+					sprintf(msg, "%c", (char) 26);
+					HAL_UART_Transmit_IT(pMqttConn->sim->huart, msg , strlen(msg));
+					return true;
 			}
 		}
 	}
@@ -128,41 +129,43 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 
 
 bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload){
-	if(pMqttConn->connected){
-		if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpubhex, MQTT_AT_MIN_TIMEOUT, 1, "1")){
-			uint8_t content_length = strlen(payload);
-			char true_payload[content_length+1];
-			char byte_size[4];
-			if(content_length % 2 != 0){
-				sprintf(true_payload, "%s0", payload);
-				sprintf(byte_size, "%d", (content_length+1)/2);
-			}
-			else{
-				strcpy(true_payload, payload);
-				sprintf(byte_size, "%d", content_length/2);
-			}
+	if(pMqttConn->sim->app_network){
+		if(pMqttConn->connected){
+			if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpubhex, MQTT_AT_MIN_TIMEOUT, 1, "1")){
+				uint8_t content_length = strlen(payload);
+				char true_payload[content_length+1];
+				char byte_size[4];
+				if(content_length % 2 != 0){
+					sprintf(true_payload, "%s0", payload);
+					sprintf(byte_size, "%d", (content_length+1)/2);
+				}
+				else{
+					strcpy(true_payload, payload);
+					sprintf(byte_size, "%d", content_length/2);
+				}
 
-			if(pMqttConn->connected){
-				if(at_write_blocking(
-						pMqttConn->sim->huart,
-						mqtt_rx_buff,
-						smpub,
-						MQTT_AT_MIN_TIMEOUT,
-						8,
-						"\"",
-						topic,
-						"\",\"",
-						byte_size,
-						"\",",
-						qos,
-						",",
-						retain) == AT_STATE_ENTER_INPUT)
-				{
+				if(pMqttConn->connected){
+					if(at_write_blocking(
+							pMqttConn->sim->huart,
+							mqtt_rx_buff,
+							smpub,
+							MQTT_AT_MIN_TIMEOUT,
+							8,
+							"\"",
+							topic,
+							"\",\"",
+							byte_size,
+							"\",",
+							qos,
+							",",
+							retain) == AT_STATE_ENTER_INPUT)
+					{
 
 
-					HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), MQTT_AT_MIN_TIMEOUT);
-					HAL_UART_Transmit(pMqttConn->sim->huart, "\n" , 1, 200);
-					return true;
+						HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), MQTT_AT_MIN_TIMEOUT);
+						HAL_UART_Transmit(pMqttConn->sim->huart, "\n" , 1, 200);
+						return true;
+					}
 				}
 			}
 		}
@@ -170,6 +173,28 @@ bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* top
 	return false;
 }
 
+
+
+
+bool mqtt_sub(mqtt_conn_t* pMqttConn, char* qos, char* topic){
+	if(pMqttConn->sim->app_network){
+		if(pMqttConn->connected){
+			if(at_write_blocking(
+				pMqttConn->sim->huart,
+				mqtt_rx_buff,
+				smsub,
+				MQTT_AT_MIN_TIMEOUT,
+				4,
+				"\"",
+				topic,
+				"\",",
+				qos)){
+					return true;
+			}
+		}
+	}
+	return false;
+}
 
 
 
@@ -195,15 +220,3 @@ bool mqtt_conn_status(mqtt_conn_t* pMqttConn){
 
 
 
-void mqtt_event_handler(mqtt_conn_t* pMqttConn, char* event_buff){
-	if(strlen(event_buff) > 0){
-		if(find_substr(event_buff, "+SMSUB")){
-
-		}
-		if(find_substr(event_buff, "+SMSTATE")){
-			if(find_substr(event_buff, "0")){
-				pMqttConn->connected = false;
-			}
-		}
-	}
-}

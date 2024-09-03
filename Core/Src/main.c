@@ -18,7 +18,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "dma.h"
 #include "i2c.h"
 #include "usart.h"
@@ -30,6 +31,7 @@
 #include "sim.h"
 #include "oled.h"
 #include "modbus.h"
+#include "sim_event.h"
 
 /* USER CODE END Includes */
 
@@ -67,6 +69,7 @@
 
 const UART_HandleTypeDef* PHUART_SIM = &huart1;
 const UART_HandleTypeDef* PHUART_MODBUS = &huart2;
+const UART_HandleTypeDef* PHUART_EVENT = &huart3;
 
 
 const char* topic_coil = "MCU/COIL/";
@@ -85,12 +88,14 @@ sim_t sim;
 oled_t oled;
 mqtt_conn_t mqtt_conn;
 MODBUS_MASTER_InitTypeDef master;
+sim_event_listener_t sim_evt;
 
 char modbus_tx_buff[MODBUS_TX_SIZE];
 char modbus_rx_buff[MODBUS_RX_SIZE];
 char mqtt_payload_buff[MQTT_PAYLOAD_BUFF_SIZE];
 char mqtt_topic_buff[MQTT_TOPIC_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
+char event_rx_buff[SIM_EVENT_RX_SIZE];
 
 bool coil_ready_to_send = false;
 bool discrete_in_ready_to_send = false;
@@ -189,7 +194,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 			oled_printl(&oled, "UNKNOWN RESPONSE!");
 		}
 
+	}
 
+	if(huart->Instance == PHUART_EVENT->Instance){
+		oled_printl(&oled, "EVENT !");
+		sim_event_listen(&sim_evt);
 	}
 
 
@@ -235,11 +244,21 @@ int main(void)
   sim_init(&sim, PHUART_SIM, "mtnirancell", "", "");
   mqtt_init(&mqtt_conn, &sim, "STM32_GATEWAY", "5.198.179.50", "1883", "", "", MQTT_KEEPTIME);
   MODBUS_MASTER_init(&master, PHUART_MODBUS, modbus_tx_buff, modbus_rx_buff);
+  sim_event_init(&sim_evt, PHUART_EVENT, event_rx_buff, &sim);
 
 
 setup:
   if(setup()){
+	  if(mqtt_sub(&mqtt_conn, "0", "test/#")){
+	  	  oled_printl(&oled, "SUB DONE !");
+	  }
+	  else{
+		  oled_printl(&oled, "SUB FAILED !");
+	  }
+
 	  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
+
+	  sim_event_listen(&sim_evt);
 //	  repeative_task();
 //	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
   }
@@ -253,15 +272,10 @@ setup:
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  osKernelInitialize();
 
-  /* Call init function for freertos objects (in cmsis_os2.c) */
-  MX_FREERTOS_Init();
-
-  /* Start scheduler */
-  osKernelStart();
-
+  xTaskCreate(repeative_task, "repeative_task", 128, NULL, 1, NULL);
   /* We should never get here as control is now taken by the scheduler */
+  vTaskStartScheduler();
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -333,9 +347,9 @@ void repeative_task(void *args){
 				}
 				discrete_in_ready_to_send = false;
 			}
-			osDelay(pdMS_TO_TICKS(1000));
+			osDelay(1000);
 		}
-		modbus_discrete_input_addr = 1025;
+		modbus_discrete_input_addr = 0;
 
 		MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
 		for(uint8_t i=0;i<3;i++){
@@ -351,9 +365,9 @@ void repeative_task(void *args){
 				}
 				holding_reg_ready_to_send = false;
 			}
-			osDelay(pdMS_TO_TICKS(1000));
+			osDelay(1000);
 		}
-		modbus_holding_reg_addr = 4097;
+		modbus_holding_reg_addr = 0;
 	}
 }
 
@@ -430,10 +444,7 @@ bool setup(){
 
 
 
-void publish(char* topic, char* payload){
 
-
-}
 /* USER CODE END 4 */
 
 /**
