@@ -204,7 +204,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 	if(huart->Instance == PHUART_EVENT->Instance){
 		BaseType_t xHigherPriorityTaskWoken = pdTRUE;
 		xSemaphoreGiveFromISR(event_semphr, &xHigherPriorityTaskWoken);
-		sim_event_listen(&sim_evt);
+
 	}
 
 
@@ -255,7 +255,7 @@ int main(void)
 
 setup:
   if(setup()){
-	  if(mqtt_sub(&mqtt_conn, "0", "test/#")){
+	  if(mqtt_sub(&mqtt_conn, "0", "SERVER/#")){
 	  	  oled_printl(&oled, "SUB DONE !");
 	  }
 	  else{
@@ -456,9 +456,39 @@ bool setup(){
 
 void event_handler_task(void* pvArgs){
 
+	uint8_t* rx_buff;
+	char topic_buff[50];
+	char payload_buff[10];
 	for(;;){
 		xSemaphoreTake(event_semphr, portMAX_DELAY);
-		oled_printl(&oled, "EVENT!");
+
+		rx_buff = sim_evt.pRxBuff;
+		if(find_substr(rx_buff, "SMSUB")){
+			oled_printl(&oled, "SMSUB!");
+			sim_event_smsub_decode(&sim_evt, topic_buff, payload_buff);
+			sim_event_type_sub_t evt_type = sim_event_type_sub(mqtt_topic_buff);
+			uint16_t reg_virt_addr;
+			uint16_t reg_val;
+			sim_event_reg_decode_val_addr(
+					topic_buff,
+					payload_buff,
+					&reg_virt_addr,
+					&reg_val);
+			switch(evt_type){
+				case SIM_EVENT_TYPE_SUB_SET_REG_ADDR:
+					break;
+				case SIM_EVENT_TYPE_SUB_SET_REG_VALUE:
+					break;
+				default:
+					break;
+			}
+		}
+
+
+		strcpy(sim_evt.pRxBuff, "");
+		strcpy(topic_buff, "");
+		strcpy(payload_buff, "");
+		sim_event_listen(&sim_evt);
 	}
 }
 /* USER CODE END 4 */
