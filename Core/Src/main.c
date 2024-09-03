@@ -20,6 +20,7 @@
 #include "main.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 #include "dma.h"
 #include "i2c.h"
 #include "usart.h"
@@ -84,6 +85,9 @@ const char* topic_input_reg = "MCU/INPUT_REG/";
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+SemaphoreHandle_t event_semphr;
+
+
 sim_t sim;
 oled_t oled;
 mqtt_conn_t mqtt_conn;
@@ -116,6 +120,7 @@ void MX_FREERTOS_Init(void);
 
 bool setup();
 void repeative_task(void *args);
+void event_handler_task(void* pvArgs);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -197,7 +202,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 	}
 
 	if(huart->Instance == PHUART_EVENT->Instance){
-		oled_printl(&oled, "EVENT !");
+		BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+		xSemaphoreGiveFromISR(event_semphr, &xHigherPriorityTaskWoken);
 		sim_event_listen(&sim_evt);
 	}
 
@@ -272,8 +278,9 @@ setup:
   /* USER CODE END 2 */
 
   /* Init scheduler */
-
+  event_semphr = xSemaphoreCreateBinary();
   xTaskCreate(repeative_task, "repeative_task", 128, NULL, 1, NULL);
+  xTaskCreate(event_handler_task, "event_task", 128, NULL, 2, NULL);
   /* We should never get here as control is now taken by the scheduler */
   vTaskStartScheduler();
 
@@ -445,6 +452,15 @@ bool setup(){
 
 
 
+
+
+void event_handler_task(void* pvArgs){
+
+	for(;;){
+		xSemaphoreTake(event_semphr, portMAX_DELAY);
+		oled_printl(&oled, "EVENT!");
+	}
+}
 /* USER CODE END 4 */
 
 /**
