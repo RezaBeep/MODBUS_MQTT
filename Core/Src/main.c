@@ -258,6 +258,8 @@ int main(void)
   MODBUS_MASTER_init(&master, PHUART_MODBUS, modbus_tx_buff, modbus_rx_buff);
   sim_event_init(&sim_evt, PHUART_EVENT, event_rx_buff, &sim);
 
+  HAL_FLASH_Unlock();
+  EE_Init();
   modbus_reg_retrieve_addresses(din_addr, dout_addr, wdata_addr);
 
 setup:
