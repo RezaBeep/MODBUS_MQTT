@@ -33,6 +33,8 @@
 #include "oled.h"
 #include "modbus.h"
 #include "sim_event.h"
+#include "eeprom.h"
+#include "modbus_reg.h"
 
 /* USER CODE END Includes */
 
