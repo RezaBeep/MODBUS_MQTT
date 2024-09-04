@@ -11,6 +11,7 @@
 #endif /* INC_MODBUS_H_ */
 
 #include "main.h"
+#include "stdbool.h"
 
 
 
@@ -38,6 +39,23 @@ typedef struct {
 	uint16_t register_addr;
 	uint16_t number_of_points;
 } MODBUS_MASTER_req;
+
+
+typedef struct {
+	uint8_t slave_addr;
+	uint8_t function_code;
+	uint16_t register_addr;
+	uint16_t value;
+} MODBUS_MASTER_wr_req;
+
+
+typedef struct {
+	uint8_t slave_addr;
+	uint8_t function_code;
+	uint16_t register_addr;
+	uint16_t value;
+	uint16_t crc;
+} MODBUS_MASTER_wr_res;
 
 
 typedef struct {
@@ -105,6 +123,12 @@ void MODBUS_MASTER_read_discrete_input(
 		uint16_t register_addr,
 		uint16_t number_of_points);
 
+
+void MODBUS_MASTER_write_single_coil(
+		MODBUS_MASTER_InitTypeDef *master,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		bool output);
 
 
 

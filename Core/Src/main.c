@@ -191,6 +191,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 				else if(normal_res.function_code == 4){
 					input_reg_ready_to_send = true;
 				}
+				else if(normal_res.function_code == 5){
+					oled_printl(&oled, "WRITE COIL OK");
+				}
 
 				modbus_res = &normal_res;
 				sprintf(mqtt_payload_buff, "%04X", (uint16_t)((register_data[0]<<8) | register_data[1]));
@@ -392,7 +395,6 @@ void repeative_task(void *args){
 
 bool setup(){
 	  oled_printl(&oled, "Please wait");
-//	  HAL_Delay(15000);
 	  oled_printl(&oled, "sending AT..");
 	  if(sim_test_at(&sim)){
 		  oled_printl(&oled, "AT OK!");
@@ -499,6 +501,13 @@ void event_handler_task(void* pvArgs){
 					}
 					break;
 				case SIM_EVENT_TYPE_SUB_SET_REG_VALUE:
+					if(find_substr(topic_buff, "COIL")){
+						MODBUS_MASTER_write_single_coil(
+								&master,
+								MODBUS_SLAVE_ADDR,
+								dout_addr[reg_virt_addr],
+								reg_val);
+					}
 					break;
 				default:
 					break;
