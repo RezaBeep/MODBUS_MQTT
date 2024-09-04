@@ -103,6 +103,10 @@ char mqtt_topic_buff[MQTT_TOPIC_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
 char event_rx_buff[SIM_EVENT_RX_SIZE];
 
+uint16_t din_addr[MODBUS_REG_DIN_COUNT];
+uint16_t dout_addr[MODBUS_REG_DOUT_COUNT];
+uint16_t wdata_addr[MODBUS_REG_WDATA_COUNT];
+
 bool coil_ready_to_send = false;
 bool discrete_in_ready_to_send = false;
 bool input_reg_ready_to_send = false;
@@ -254,6 +258,7 @@ int main(void)
   MODBUS_MASTER_init(&master, PHUART_MODBUS, modbus_tx_buff, modbus_rx_buff);
   sim_event_init(&sim_evt, PHUART_EVENT, event_rx_buff, &sim);
 
+  modbus_reg_retrieve_addresses(din_addr, dout_addr, wdata_addr);
 
 setup:
   if(setup()){
@@ -468,7 +473,7 @@ void event_handler_task(void* pvArgs){
 		if(find_substr(rx_buff, "SMSUB")){
 			oled_printl(&oled, "SMSUB!");
 			sim_event_smsub_decode(&sim_evt, topic_buff, payload_buff);
-			sim_event_type_sub_t evt_type = sim_event_type_sub(mqtt_topic_buff);
+			sim_event_type_sub_t evt_type = sim_event_type_sub(topic_buff);
 			uint16_t reg_virt_addr;
 			uint16_t reg_val;
 			sim_event_reg_decode_val_addr(
@@ -478,6 +483,18 @@ void event_handler_task(void* pvArgs){
 					&reg_val);
 			switch(evt_type){
 				case SIM_EVENT_TYPE_SUB_SET_REG_ADDR:
+					if(find_substr(topic_buff, "DIN")){
+						modbus_reg_write_din_addr(reg_virt_addr, reg_val);
+						din_addr[reg_virt_addr] = reg_val;
+					}
+					if(find_substr(topic_buff, "DOUT")){
+						modbus_reg_write_dout_addr(reg_virt_addr, reg_val);
+						dout_addr[reg_virt_addr] = reg_val;
+					}
+					if(find_substr(topic_buff, "WDATA")){
+						modbus_reg_write_wdata_addr(reg_virt_addr, reg_val);
+						wdata_addr[reg_virt_addr] = reg_val;
+					}
 					break;
 				case SIM_EVENT_TYPE_SUB_SET_REG_VALUE:
 					break;

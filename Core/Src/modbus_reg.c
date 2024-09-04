@@ -75,3 +75,16 @@ modbus_reg_state_t modbus_reg_write_wdata_addr(uint8_t num, uint16_t addr){
 	return EE_WriteVariable(ee_virtual_addr, addr);
 }
 
+
+
+void modbus_reg_retrieve_addresses(uint16_t* din, uint16_t* dout, uint16_t* wdata){
+	for(uint8_t i=0;i<10; i++){
+		modbus_reg_read_din_addr(i, (din+i));
+	}
+	for(uint8_t i=0;i<10; i++){
+		modbus_reg_read_dout_addr(i, (dout+i));
+	}
+	for(uint8_t i=0;i<10; i++){
+		modbus_reg_read_wdata_addr(i, (wdata+i));
+	}
+}

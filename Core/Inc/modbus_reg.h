@@ -64,5 +64,7 @@ modbus_reg_state_t modbus_reg_read_wdata_addr(uint8_t num, uint16_t* addr);
 modbus_reg_state_t modbus_reg_write_wdata_addr(uint8_t num, uint16_t addr);
 
 
+void modbus_reg_retrieve_addresses(uint16_t* din, uint16_t* dout, uint16_t* wdata);
+
 
 #endif /* INC_MODBUS_REG_H_ */

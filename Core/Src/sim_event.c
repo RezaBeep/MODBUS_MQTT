@@ -63,7 +63,7 @@ void sim_event_reg_decode_val_addr(char* topic, char* payload, uint16_t* pAddr, 
     char reg_pos2[reg_pos_len];
     strncpy(reg_pos2, reg_pos+4, reg_pos_len);
     uint16_t pos = strtol(reg_pos2, (char**) NULL, 10);
-    uint16_t val = strtol(payload, (char**) NULL, 16);
+    uint16_t val = strtol(payload, (char**) NULL, 10);
 
     (*pAddr) = pos;
     (*pVal) = val;
