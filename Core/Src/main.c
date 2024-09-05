@@ -194,6 +194,9 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 				else if(normal_res.function_code == 5){
 					oled_printl(&oled, "WRITE COIL OK");
 				}
+				else if(normal_res.function_code == 6){
+					oled_printl(&oled, "WRITE REG OK");
+				}
 
 				modbus_res = &normal_res;
 				sprintf(mqtt_payload_buff, "%04X", (uint16_t)((register_data[0]<<8) | register_data[1]));
@@ -503,6 +506,13 @@ void event_handler_task(void* pvArgs){
 				case SIM_EVENT_TYPE_SUB_SET_REG_VALUE:
 					if(find_substr(topic_buff, "COIL")){
 						MODBUS_MASTER_write_single_coil(
+								&master,
+								MODBUS_SLAVE_ADDR,
+								dout_addr[reg_virt_addr],
+								reg_val);
+					}
+					if(find_substr(topic_buff, "WDATA")){
+						MODBUS_MASTER_write_single_holding_reg(
 								&master,
 								MODBUS_SLAVE_ADDR,
 								dout_addr[reg_virt_addr],

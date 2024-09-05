@@ -171,4 +171,30 @@ void MODBUS_MASTER_write_single_coil(
 
 
 
+void MODBUS_MASTER_write_single_holding_reg(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		uint16_t val)
+{
+	uint16_t rx_size = 5;
+	uint8_t function_code = 6;
+
+	pMaster->pchTxBuffer[0] = slave_addr;
+	pMaster->pchTxBuffer[1] = function_code;
+	pMaster->pchTxBuffer[2] = register_addr>>8;
+	pMaster->pchTxBuffer[3] = register_addr;
+	pMaster->pchTxBuffer[4] = val>>8;
+	pMaster->pchTxBuffer[5] = val;
+	uint16_t crc = CRC16(pMaster->pchTxBuffer, 6);
+	pMaster->pchTxBuffer[6] = crc&0xff;
+	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
+
+
+	HAL_UART_Transmit_IT(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE);
+	HAL_UARTEx_ReceiveToIdle_DMA(pMaster->huart, pMaster->pchRxBuffer, rx_size);
+}
+
+
+
 

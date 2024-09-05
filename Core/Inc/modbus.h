@@ -125,10 +125,18 @@ void MODBUS_MASTER_read_discrete_input(
 
 
 void MODBUS_MASTER_write_single_coil(
-		MODBUS_MASTER_InitTypeDef *master,
+		MODBUS_MASTER_InitTypeDef *pMaster,
 		uint8_t slave_addr,
 		uint16_t register_addr,
 		bool output);
+
+
+
+void MODBUS_MASTER_write_single_holding_reg(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		uint16_t val);
 
 
 
