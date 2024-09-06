@@ -21,10 +21,12 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "queue.h"
 #include "dma.h"
 #include "i2c.h"
 #include "usart.h"
 #include "gpio.h"
+#include "stdio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -47,13 +49,11 @@
 /* USER CODE BEGIN PD */
 #define MODBUS_TX_SIZE	8
 #define MODBUS_RX_SIZE	64
-#define MODBUS_SLAVE_ADDR	57
-#define MODBUS_COIL_ADDR_STEP	16
-#define MODBUS_REG_ADDR_STEP	1
-#define MODBUS_ADDR_COIL_MAX	30
-#define MODBUS_ADDR_HOLDING_REG_MAX		30
-#define MODBUS_ADDR_INPUT_REG_MAX	30
-#define MODBUS_ADDR_DISCRETE_INPUT_MAX	30
+#define MODBUS_SLAVE_ADDR	1
+#define MODBUS_COIL_NB_POINTS	16
+#define MODBUS_REG_NB_POINTS	1
+
+
 
 
 #define MQTT_KEEPTIME	"60"
@@ -67,8 +67,7 @@
 
 #define OLED_BUFF_SIZE	15
 
-#define _DEBUG	true
-
+BaseType_t xHigherPriorityTaskWoken;
 
 const UART_HandleTypeDef* PHUART_SIM = &huart1;
 const UART_HandleTypeDef* PHUART_MODBUS = &huart2;
@@ -88,6 +87,11 @@ const char* topic_input_reg = "MCU/INPUT_REG/";
 
 /* Private variables ---------------------------------------------------------*/
 SemaphoreHandle_t event_semphr;
+SemaphoreHandle_t modbus_res_semphr;
+
+
+QueueHandle_t qmodbus_reg_val;
+
 
 
 sim_t sim;
@@ -125,8 +129,10 @@ void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 
 bool setup();
-void repeative_task(void *args);
+void modbus_res_handler_task(void* pvArgs);
+void modbus_read_task(void* pvArgs);
 void event_handler_task(void* pvArgs);
+void publish_task(void* pvArgs);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -148,7 +154,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	if(huart->Instance == PHUART_MODBUS->Instance){
-		oled_printl(&oled, "modbus req sent");
+//		oled_printl(&oled, "modbus req sent");
 	}
 
 }
@@ -167,56 +173,18 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
-	oled_printl(&oled, "rx event");
+//	oled_printl(&oled, "rx event");
+
 	if(huart->Instance == PHUART_MODBUS->Instance){
-		oled_printl(&oled, "modbus response");
-		MODBUS_MASTER_res normal_res = {0};
-		MODBUS_MASTER_exception exception = {0};
-
-		if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_OK){
-			uint8_t* register_data = normal_res.register_data;
-			if(!register_data){
-				oled_printl(&oled, "register NULL");
-			}
-			else{
-				if(normal_res.function_code == 1){
-					coil_ready_to_send = true;
-				}
-				else if(normal_res.function_code == 2){
-					discrete_in_ready_to_send = true;
-				}
-				else if(normal_res.function_code == 3){
-					holding_reg_ready_to_send = true;
-				}
-				else if(normal_res.function_code == 4){
-					input_reg_ready_to_send = true;
-				}
-				else if(normal_res.function_code == 5){
-					oled_printl(&oled, "WRITE COIL OK");
-				}
-				else if(normal_res.function_code == 6){
-					oled_printl(&oled, "WRITE REG OK");
-				}
-
-				modbus_res = &normal_res;
-				sprintf(mqtt_payload_buff, "%04X", (uint16_t)((register_data[0]<<8) | register_data[1]));
-				oled_printl(&oled, "MODBUS_RES_OK");
-			}
-		}
-		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
-			oled_printl(&oled, "MODBUS_RES_EXCEPTION");
-			sprintf(oled_buff, "exception 0x%X", (uint16_t) exception.exception_code);
-		}
-		else{
-			oled_printl(&oled, "UNKNOWN RESPONSE!");
-		}
-
+		xHigherPriorityTaskWoken = pdFALSE;
+		xSemaphoreGiveFromISR(modbus_res_semphr, &xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
 
 	if(huart->Instance == PHUART_EVENT->Instance){
-		BaseType_t xHigherPriorityTaskWoken = pdTRUE;
+		xHigherPriorityTaskWoken = pdFALSE;
 		xSemaphoreGiveFromISR(event_semphr, &xHigherPriorityTaskWoken);
-
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
 
 
@@ -294,8 +262,13 @@ setup:
 
   /* Init scheduler */
   event_semphr = xSemaphoreCreateBinary();
-  xTaskCreate(repeative_task, "repeative_task", 128, NULL, 1, NULL);
-  xTaskCreate(event_handler_task, "event_task", 128, NULL, 2, NULL);
+  modbus_res_semphr = xSemaphoreCreateBinary();
+
+  qmodbus_reg_val = xQueueCreate(1, sizeof(uint16_t));
+
+  xTaskCreate(event_handler_task, "event_task", 128, NULL, 3, NULL);
+  xTaskCreate(modbus_read_task, "read_task", 128, NULL, 1, NULL);
+  xTaskCreate(modbus_res_handler_task, "modbus_res_task", 128, NULL, 2, NULL);
   /* We should never get here as control is now taken by the scheduler */
   vTaskStartScheduler();
 
@@ -352,46 +325,6 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 
-void repeative_task(void *args){
-
-	while(1){
-		MODBUS_MASTER_read_discrete_input(&master, MODBUS_SLAVE_ADDR, modbus_discrete_input_addr, MODBUS_COIL_ADDR_STEP);
-		for(uint8_t i=0;i<2;i++){
-			if(discrete_in_ready_to_send){
-				sprintf(mqtt_topic_buff, "%s%d", topic_discrete_input, modbus_discrete_input_addr);
-				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
-					oled_printl(&oled, "Failed to publish");
-				}
-				else{
-					oled_printl(&oled, "published");
-					modbus_discrete_input_addr += MODBUS_COIL_ADDR_STEP;
-					MODBUS_MASTER_read_discrete_input(&master, MODBUS_SLAVE_ADDR, modbus_discrete_input_addr, MODBUS_COIL_ADDR_STEP);
-				}
-				discrete_in_ready_to_send = false;
-			}
-			osDelay(1000);
-		}
-		modbus_discrete_input_addr = 0;
-
-		MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
-		for(uint8_t i=0;i<3;i++){
-			if(holding_reg_ready_to_send){
-				sprintf(mqtt_topic_buff, "%s%d", topic_holding_reg, modbus_holding_reg_addr);
-				if(!mqtt_publish_hex(&mqtt_conn, "0", "0", mqtt_topic_buff, mqtt_payload_buff)){
-					oled_printl(&oled, "Failed to publish");
-				}
-				else{
-					oled_printl(&oled, "published");
-					modbus_holding_reg_addr += MODBUS_REG_ADDR_STEP;
-					MODBUS_MASTER_read_holding_reg(&master, MODBUS_SLAVE_ADDR, modbus_holding_reg_addr, MODBUS_REG_ADDR_STEP);
-				}
-				holding_reg_ready_to_send = false;
-			}
-			osDelay(1000);
-		}
-		modbus_holding_reg_addr = 0;
-	}
-}
 
 
 
@@ -515,7 +448,7 @@ void event_handler_task(void* pvArgs){
 						MODBUS_MASTER_write_single_holding_reg(
 								&master,
 								MODBUS_SLAVE_ADDR,
-								dout_addr[reg_virt_addr],
+								wdata_addr[reg_virt_addr],
 								reg_val);
 					}
 					break;
@@ -529,6 +462,137 @@ void event_handler_task(void* pvArgs){
 		strcpy(topic_buff, "");
 		strcpy(payload_buff, "");
 		sim_event_listen(&sim_evt);
+	}
+}
+
+
+
+
+void modbus_read_task(void* pvArgs){
+
+	for(;;){
+		uint16_t reg_addr = 0;
+		uint16_t reg_val = 0;
+		for (uint8_t i = 0; i < MODBUS_REG_DIN_COUNT; ++i) {
+			reg_addr = din_addr[i];
+			if(reg_addr > 0){
+				MODBUS_MASTER_read_discrete_input(
+						&master,
+						MODBUS_SLAVE_ADDR,
+						reg_addr,
+						MODBUS_COIL_NB_POINTS);
+//				oled_printl(&oled, "READ DI");
+
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+//					oled_printl(&oled, "DI RES");
+				}
+
+			}
+//			osDelay(pdMS_TO_TICKS(50));
+		}
+
+		for (uint8_t i = 0; i < MODBUS_REG_DOUT_COUNT; ++i) {
+			reg_addr = dout_addr[i];
+			if(reg_addr > 0){
+				MODBUS_MASTER_read_coils(
+						&master,
+						MODBUS_SLAVE_ADDR,
+						reg_addr,
+						MODBUS_COIL_NB_POINTS);
+//				oled_printl(&oled, "READ COIL");
+
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+//					oled_printl(&oled, "DOUT RES");
+				}
+			}
+//			osDelay(pdMS_TO_TICKS(50));
+		}
+
+		for (uint8_t i = 0; i < MODBUS_REG_WDATA_COUNT; ++i) {
+			reg_addr = wdata_addr[i];
+			if(reg_addr > 0){
+				MODBUS_MASTER_read_holding_reg(
+						&master,
+						MODBUS_SLAVE_ADDR,
+						reg_addr,
+						MODBUS_REG_NB_POINTS);
+//				oled_printl(&oled, "READ WDATA");
+
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+//					oled_printl(&oled, "WDATA RES");
+				}
+			}
+//			osDelay(pdMS_TO_TICKS(50));
+		}
+	}
+}
+
+
+
+
+
+void modbus_res_handler_task(void* pvArgs){
+
+	for(;;){
+
+		xSemaphoreTake(modbus_res_semphr, portMAX_DELAY);
+//		oled_printl(&oled, "modbus response");
+		MODBUS_MASTER_res normal_res = {0};
+		MODBUS_MASTER_exception exception = {0};
+
+		if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_OK){
+			uint8_t* register_data = normal_res.register_data;
+			if(!register_data){
+				oled_printl(&oled, "register NULL");
+			}
+			else{
+
+				uint16_t data = normal_res.register_data[0] << 8 | normal_res.register_data[1];
+
+				switch (normal_res.function_code) {
+					case MODBUS_FC_RD_DI:
+						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
+						break;
+					case MODBUS_FC_RD_DO:
+						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
+						break;
+					case MODBUS_FC_RD_HR:
+						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
+						break;
+					case MODBUS_FC_RD_IR:
+						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
+						break;
+					case MODBUS_FC_WR_DO:
+
+						break;
+					case MODBUS_FC_WR_HR:
+
+						break;
+					default:
+						break;
+				}
+
+
+//				oled_printl(&oled, "MODBUS_RES_OK");
+			}
+		}
+		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
+//			oled_printl(&oled, "MODBUS_RES_EXCEPTION");
+//			sprintf(oled_buff, "exception 0x%X", (uint16_t) exception.exception_code);
+		}
+		else{
+			oled_printl(&oled, "UNKNOWN RESPONSE!");
+		}
+
+	}
+}
+
+
+
+void publish_task(void* pvArgs){
+
+	for(;;){
+
 	}
 }
 /* USER CODE END 4 */

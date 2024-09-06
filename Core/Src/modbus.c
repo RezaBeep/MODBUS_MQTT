@@ -99,7 +99,7 @@ modbus_res_type MODBUS_MASTER_response_handler(
 
 
 void MODBUS_MASTER_read_coils(MODBUS_MASTER_InitTypeDef *pMaster, uint8_t slave_addr, uint16_t register_addr, uint16_t number_of_points){
-	MODBUS_MASTER_request(pMaster, slave_addr, 1, register_addr, number_of_points);
+	MODBUS_MASTER_request(pMaster, slave_addr, MODBUS_FC_RD_DO, register_addr, number_of_points);
 }
 
 
@@ -112,7 +112,7 @@ void MODBUS_MASTER_read_input_reg(
 		uint16_t register_addr,
 		uint16_t number_of_points)
 {
-	MODBUS_MASTER_request(pMaster, slave_addr, 4, register_addr, number_of_points);
+	MODBUS_MASTER_request(pMaster, slave_addr, MODBUS_FC_RD_IR, register_addr, number_of_points);
 }
 
 
@@ -123,7 +123,7 @@ void MODBUS_MASTER_read_holding_reg(
 		uint16_t register_addr,
 		uint16_t number_of_points)
 {
-	MODBUS_MASTER_request(pMaster, slave_addr, 3, register_addr, number_of_points);
+	MODBUS_MASTER_request(pMaster, slave_addr, MODBUS_FC_RD_HR, register_addr, number_of_points);
 }
 
 
@@ -135,7 +135,7 @@ void MODBUS_MASTER_read_discrete_input(
 		uint16_t register_addr,
 		uint16_t number_of_points)
 {
-	MODBUS_MASTER_request(pMaster, slave_addr, 2, register_addr, number_of_points);
+	MODBUS_MASTER_request(pMaster, slave_addr, MODBUS_FC_RD_DI, register_addr, number_of_points);
 }
 
 
@@ -147,7 +147,7 @@ void MODBUS_MASTER_write_single_coil(
 		bool output)
 {
 	uint16_t rx_size = 5;
-	uint8_t function_code = 5;
+	uint8_t function_code = MODBUS_FC_WR_DO;
 
 	uint16_t value = 0;
 	if(output){
@@ -178,7 +178,7 @@ void MODBUS_MASTER_write_single_holding_reg(
 		uint16_t val)
 {
 	uint16_t rx_size = 5;
-	uint8_t function_code = 6;
+	uint8_t function_code = MODBUS_FC_WR_HR;
 
 	pMaster->pchTxBuffer[0] = slave_addr;
 	pMaster->pchTxBuffer[1] = function_code;

@@ -16,7 +16,12 @@
 
 
 #define TX_SIZE 8
-
+#define MODBUS_FC_RD_DO		1
+#define MODBUS_FC_RD_DI		2
+#define MODBUS_FC_RD_HR		3
+#define MODBUS_FC_RD_IR		4
+#define MODBUS_FC_WR_DO		5
+#define MODBUS_FC_WR_HR		6
 
 typedef enum{
 	MODBUS_RES_OK,
