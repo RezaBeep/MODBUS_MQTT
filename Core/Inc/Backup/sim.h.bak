@@ -68,7 +68,7 @@ bool sim_app_network_is_connected(sim_t* psim);
 
 bool sim_setup(sim_t* psim);
 
-void sim_event_listen_once(sim_t* psim);
+
 void sim_event_handler(sim_t* psim, char* event_buff);
 void sim_event_poll_once(sim_t* psim, uint32_t timeout);
 

@@ -8,7 +8,7 @@
 #include "mqtt.h"
 #include "oled.h"
 #include "i2c.h"
-
+#include "FreeRTOS.h"
 
 
 char* smconf = "SMCONF";
