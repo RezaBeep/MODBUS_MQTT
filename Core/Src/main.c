@@ -53,8 +53,13 @@
 #define MODBUS_COIL_NB_POINTS	16
 #define MODBUS_REG_NB_POINTS	1
 
+#define MODBUS_REG_TYPE_DI		MODBUS_FC_RD_DI
+#define MODBUS_REG_TYPE_COIL		MODBUS_FC_RD_DO
+#define MODBUS_REG_TYPE_WDATA		MODBUS_FC_RD_HR
 
 
+#define MQTT_QOS	"0"
+#define MQTT_RETAIN		"0"
 
 #define MQTT_KEEPTIME	"60"
 #define MQTT_PAYLOAD_BUFF_SIZE	20
@@ -132,7 +137,7 @@ bool setup();
 void modbus_res_handler_task(void* pvArgs);
 void modbus_read_task(void* pvArgs);
 void event_handler_task(void* pvArgs);
-
+bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -399,6 +404,81 @@ bool setup(){
 
 
 
+bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val){
+	switch (reg_type) {
+		case MODBUS_REG_TYPE_DI:
+			snprintf(
+					mqtt_topic_buff,
+					MQTT_TOPIC_BUFF_SIZE,
+					"%s%u",
+					topic_discrete_input, reg_virt_addr);
+			snprintf(
+					mqtt_payload_buff,
+					MQTT_PAYLOAD_BUFF_SIZE,
+					"%04X",
+					reg_virt_addr);
+			if(mqtt_publish_hex(
+					&mqtt_conn,
+					MQTT_QOS,
+					MQTT_RETAIN,
+					mqtt_topic_buff,
+					mqtt_payload_buff))
+			{
+				return true;
+			}
+
+			break;
+		case MODBUS_REG_TYPE_COIL:
+			snprintf(
+					mqtt_topic_buff,
+					MQTT_TOPIC_BUFF_SIZE,
+					"%s%u",
+					topic_coil, reg_virt_addr);
+			snprintf(
+					mqtt_payload_buff,
+					MQTT_PAYLOAD_BUFF_SIZE,
+					"%04X",
+					reg_virt_addr);
+			if(mqtt_publish_hex(
+					&mqtt_conn,
+					MQTT_QOS,
+					MQTT_RETAIN,
+					mqtt_topic_buff,
+					mqtt_payload_buff))
+			{
+				return true;
+			}
+			break;
+		case MODBUS_REG_TYPE_WDATA:
+			snprintf(
+					mqtt_topic_buff,
+					MQTT_TOPIC_BUFF_SIZE,
+					"%s%u",
+					topic_holding_reg, reg_virt_addr);
+			snprintf(
+					mqtt_payload_buff,
+					MQTT_PAYLOAD_BUFF_SIZE,
+					"%04X",
+					reg_virt_addr);
+			if(mqtt_publish_hex(
+					&mqtt_conn,
+					MQTT_QOS,
+					MQTT_RETAIN,
+					mqtt_topic_buff,
+					mqtt_payload_buff))
+			{
+				return true;
+			}
+			break;
+
+		default:
+			return false;
+	}
+	return false;
+}
+
+
+
 
 
 void event_handler_task(void* pvArgs){
@@ -473,7 +553,9 @@ void modbus_read_task(void* pvArgs){
 	for(;;){
 		uint16_t reg_addr = 0;
 		uint16_t reg_val = 0;
+		bool publish_res = false;
 		for (uint8_t i = 0; i < MODBUS_REG_DIN_COUNT; ++i) {
+			publish_res = false;
 			reg_addr = din_addr[i];
 			if(reg_addr > 0){
 				MODBUS_MASTER_read_discrete_input(
@@ -483,15 +565,17 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_COIL_NB_POINTS);
 //				oled_printl(&oled, "READ DI");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "DI RES");
+					publish_res = publish_reg_data(MODBUS_REG_TYPE_DI, i, reg_val);
 				}
 
 			}
-//			osDelay(pdMS_TO_TICKS(50));
+			osDelay(100);
 		}
 
 		for (uint8_t i = 0; i < MODBUS_REG_DOUT_COUNT; ++i) {
+			publish_res = false;
 			reg_addr = dout_addr[i];
 			if(reg_addr > 0){
 				MODBUS_MASTER_read_coils(
@@ -501,14 +585,16 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_COIL_NB_POINTS);
 //				oled_printl(&oled, "READ COIL");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "DOUT RES");
+					publish_res = publish_reg_data(MODBUS_REG_TYPE_COIL, i, reg_val);
 				}
 			}
-//			osDelay(pdMS_TO_TICKS(50));
+			osDelay(100);
 		}
 
 		for (uint8_t i = 0; i < MODBUS_REG_WDATA_COUNT; ++i) {
+			publish_res = false;
 			reg_addr = wdata_addr[i];
 			if(reg_addr > 0){
 				MODBUS_MASTER_read_holding_reg(
@@ -518,11 +604,12 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_REG_NB_POINTS);
 //				oled_printl(&oled, "READ WDATA");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(300)) == pdPASS){
+				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "WDATA RES");
+					publish_res = publish_reg_data(MODBUS_REG_TYPE_WDATA, i, reg_val);
 				}
 			}
-//			osDelay(pdMS_TO_TICKS(50));
+			osDelay(100);
 		}
 	}
 }
