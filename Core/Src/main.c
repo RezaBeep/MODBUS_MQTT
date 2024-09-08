@@ -47,8 +47,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MODBUS_TX_SIZE	8
-#define MODBUS_RX_SIZE	64
+#define MODBUS_TX_SIZE	32
+#define MODBUS_RX_SIZE	128
 #define MODBUS_SLAVE_ADDR	1
 #define MODBUS_COIL_NB_POINTS	16
 #define MODBUS_REG_NB_POINTS	1
@@ -95,7 +95,10 @@ SemaphoreHandle_t event_semphr;
 SemaphoreHandle_t modbus_res_semphr;
 
 
-QueueHandle_t qmodbus_reg_val;
+QueueHandle_t qmodbus_di_val;
+QueueHandle_t qmodbus_coil_val;
+QueueHandle_t qmodbus_hr_val;
+QueueHandle_t qmodbus_ir_val;
 
 
 
@@ -127,6 +130,7 @@ uint16_t modbus_discrete_input_addr = 0;
 uint16_t modbus_input_reg_addr = 0;
 /* USER CODE BEGIN PV */
 
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -138,6 +142,7 @@ void modbus_res_handler_task(void* pvArgs);
 void modbus_read_task(void* pvArgs);
 void event_handler_task(void* pvArgs);
 bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val);
+bool sim_restart();
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -160,6 +165,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	if(huart->Instance == PHUART_MODBUS->Instance){
 //		oled_printl(&oled, "modbus req sent");
+
 	}
 
 }
@@ -169,7 +175,11 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	if(huart->Instance == PHUART_MODBUS->Instance){
-
+		if(huart->Instance == PHUART_MODBUS->Instance){
+			xHigherPriorityTaskWoken = pdFALSE;
+			xSemaphoreGiveFromISR(modbus_res_semphr, &xHigherPriorityTaskWoken);
+			portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+		}
 	}
 }
 
@@ -180,11 +190,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
 //	oled_printl(&oled, "rx event");
 
-	if(huart->Instance == PHUART_MODBUS->Instance){
-		xHigherPriorityTaskWoken = pdFALSE;
-		xSemaphoreGiveFromISR(modbus_res_semphr, &xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
+
 
 	if(huart->Instance == PHUART_EVENT->Instance){
 		xHigherPriorityTaskWoken = pdFALSE;
@@ -269,7 +275,10 @@ setup:
   event_semphr = xSemaphoreCreateBinary();
   modbus_res_semphr = xSemaphoreCreateBinary();
 
-  qmodbus_reg_val = xQueueCreate(1, sizeof(uint16_t));
+  qmodbus_di_val = xQueueCreate(1, sizeof(uint16_t));
+  qmodbus_coil_val = xQueueCreate(1, sizeof(uint16_t));
+  qmodbus_hr_val = xQueueCreate(1, sizeof(uint16_t));
+  qmodbus_ir_val = xQueueCreate(1, sizeof(uint16_t));
 
   xTaskCreate(event_handler_task, "event_task", 128, NULL, 3, NULL);
   xTaskCreate(modbus_read_task, "read_task", 128, NULL, 1, NULL);
@@ -416,7 +425,7 @@ bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val
 					mqtt_payload_buff,
 					MQTT_PAYLOAD_BUFF_SIZE,
 					"%04X",
-					reg_virt_addr);
+					reg_val);
 			if(mqtt_publish_hex(
 					&mqtt_conn,
 					MQTT_QOS,
@@ -438,7 +447,7 @@ bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val
 					mqtt_payload_buff,
 					MQTT_PAYLOAD_BUFF_SIZE,
 					"%04X",
-					reg_virt_addr);
+					reg_val);
 			if(mqtt_publish_hex(
 					&mqtt_conn,
 					MQTT_QOS,
@@ -459,7 +468,7 @@ bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val
 					mqtt_payload_buff,
 					MQTT_PAYLOAD_BUFF_SIZE,
 					"%04X",
-					reg_virt_addr);
+					reg_val);
 			if(mqtt_publish_hex(
 					&mqtt_conn,
 					MQTT_QOS,
@@ -542,6 +551,18 @@ void event_handler_task(void* pvArgs){
 		strcpy(topic_buff, "");
 		strcpy(payload_buff, "");
 		sim_event_listen(&sim_evt);
+
+
+		if(find_substr(rx_buff, "DEACTIVE")){
+			// NETWORK DEACTIVATED
+			sim.app_network = false;
+			mqtt_conn.connected = false;
+			if(!sim_restart()){
+				// sim setup failed
+			}
+		}
+
+		sim_event_listen(&sim_evt);
 	}
 }
 
@@ -565,13 +586,16 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_COIL_NB_POINTS);
 //				oled_printl(&oled, "READ DI");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
+				if(xQueueReceive(qmodbus_di_val, (uint16_t*)(&reg_val), pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "DI RES");
 					publish_res = publish_reg_data(MODBUS_REG_TYPE_DI, i, reg_val);
+					if(!publish_res){
+						oled_printl(&oled, "failed to publish");
+					}
 				}
 
 			}
-			osDelay(100);
+			vTaskDelay(pdMS_TO_TICKS(100));
 		}
 
 		for (uint8_t i = 0; i < MODBUS_REG_DOUT_COUNT; ++i) {
@@ -585,12 +609,15 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_COIL_NB_POINTS);
 //				oled_printl(&oled, "READ COIL");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
+				if(xQueueReceive(qmodbus_coil_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "DOUT RES");
 					publish_res = publish_reg_data(MODBUS_REG_TYPE_COIL, i, reg_val);
+					if(!publish_res){
+						oled_printl(&oled, "failed to publish");
+					}
 				}
 			}
-			osDelay(100);
+			vTaskDelay(pdMS_TO_TICKS(100));
 		}
 
 		for (uint8_t i = 0; i < MODBUS_REG_WDATA_COUNT; ++i) {
@@ -604,12 +631,15 @@ void modbus_read_task(void* pvArgs){
 						MODBUS_REG_NB_POINTS);
 //				oled_printl(&oled, "READ WDATA");
 
-				if(xQueueReceive(qmodbus_reg_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
+				if(xQueueReceive(qmodbus_hr_val, &reg_val, pdMS_TO_TICKS(500)) == pdPASS){
 //					oled_printl(&oled, "WDATA RES");
 					publish_res = publish_reg_data(MODBUS_REG_TYPE_WDATA, i, reg_val);
+					if(!publish_res){
+						oled_printl(&oled, "failed to publish");
+					}
 				}
 			}
-			osDelay(100);
+			vTaskDelay(pdMS_TO_TICKS(100));
 		}
 	}
 }
@@ -620,50 +650,45 @@ void modbus_read_task(void* pvArgs){
 
 void modbus_res_handler_task(void* pvArgs){
 
+	volatile uint8_t fc = 0;
+	volatile modbus_res_type res_type = MODBUS_RES_UNKNOWN;
+	volatile uint16_t data = 0;
+
 	for(;;){
 
 		xSemaphoreTake(modbus_res_semphr, portMAX_DELAY);
-//		oled_printl(&oled, "modbus response");
-		MODBUS_MASTER_res normal_res = {0};
-		MODBUS_MASTER_exception exception = {0};
 
-		if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_OK){
-			uint8_t* register_data = normal_res.register_data;
-			if(!register_data){
-				oled_printl(&oled, "register NULL");
+		res_type = MODBUS_MASTER_response_check(&master, MODBUS_SLAVE_ADDR);
+		fc = master.pchRxBuffer[1];
+		if(res_type == MODBUS_RES_OK){
+			data = master.pchRxBuffer[3]<<8 | master.pchRxBuffer[4];
+			oled_printl(&oled, "MODBUS_RES_OK");
+			if(fc == MODBUS_FC_RD_DI){
+				xQueueSend(qmodbus_di_val, (void*)(&data), pdMS_TO_TICKS(100));
+			}
+
+			else if(fc == MODBUS_FC_RD_DO){
+				xQueueSend(qmodbus_coil_val, (void*)(&data), pdMS_TO_TICKS(100));
+			}
+			else if(fc == MODBUS_FC_RD_HR){
+				xQueueSend(qmodbus_hr_val, (void*)(&data), pdMS_TO_TICKS(100));
+			}
+			else if(fc == MODBUS_FC_RD_IR){
+				xQueueSend(qmodbus_ir_val, (void*)(&data), pdMS_TO_TICKS(100));
+			}
+			else if(fc == MODBUS_FC_WR_DO){
+
+			}
+			else if(fc == MODBUS_FC_WR_HR){
+
 			}
 			else{
 
-				uint16_t data = normal_res.register_data[0] << 8 | normal_res.register_data[1];
-
-				switch (normal_res.function_code) {
-					case MODBUS_FC_RD_DI:
-						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
-						break;
-					case MODBUS_FC_RD_DO:
-						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
-						break;
-					case MODBUS_FC_RD_HR:
-						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
-						break;
-					case MODBUS_FC_RD_IR:
-						xQueueSend(qmodbus_reg_val, (void*)&data, pdMS_TO_TICKS(50));
-						break;
-					case MODBUS_FC_WR_DO:
-
-						break;
-					case MODBUS_FC_WR_HR:
-
-						break;
-					default:
-						break;
-				}
-
+			}
 
 //				oled_printl(&oled, "MODBUS_RES_OK");
-			}
 		}
-		else if(MODBUS_MASTER_response_handler(&master, MODBUS_SLAVE_ADDR, &normal_res, &exception) == MODBUS_RES_EXCEPTION){
+		else if(res_type == MODBUS_RES_EXCEPTION){
 //			oled_printl(&oled, "MODBUS_RES_EXCEPTION");
 //			sprintf(oled_buff, "exception 0x%X", (uint16_t) exception.exception_code);
 		}
@@ -671,7 +696,31 @@ void modbus_res_handler_task(void* pvArgs){
 			oled_printl(&oled, "UNKNOWN RESPONSE!");
 		}
 
+//		memset(&(master.pchRxBuffer[0]), 0, MODBUS_RX_SIZE);
+//		memset(&(master.pchTxBuffer[0]), 0, MODBUS_TX_SIZE);
+
 	}
+}
+
+
+bool sim_restart(){
+	  sim_reboot(&sim);
+	  if(setup()){
+		  if(mqtt_sub(&mqtt_conn, "0", "SERVER/#")){
+		  	  oled_printl(&oled, "SUB DONE !");
+		  }
+		  else{
+			  oled_printl(&oled, "SUB FAILED !");
+		  }
+
+		  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
+
+		  sim_event_listen(&sim_evt);
+		  return true;
+	//	  repeative_task();
+	//	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
+	  }
+	  return false;
 }
 /* USER CODE END 4 */
 

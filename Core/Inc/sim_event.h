@@ -17,7 +17,7 @@
 #include "string.h"
 
 
-#define SIM_EVENT_RX_SIZE	50
+#define SIM_EVENT_RX_SIZE	200
 
 
 typedef enum{

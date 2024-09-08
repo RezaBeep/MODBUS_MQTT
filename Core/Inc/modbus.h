@@ -101,6 +101,11 @@ modbus_res_type MODBUS_MASTER_response_handler(
 		MODBUS_MASTER_exception *pException);
 
 
+modbus_res_type MODBUS_MASTER_response_check(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr);
+
+
 void MODBUS_MASTER_read_coils(
 		MODBUS_MASTER_InitTypeDef *master,
 		uint8_t slave_addr,
