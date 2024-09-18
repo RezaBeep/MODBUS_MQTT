@@ -196,6 +196,40 @@ void MODBUS_MASTER_write_single_coil(
 
 
 
+modbus_res_type MODBUS_MASTER_write_single_coil_blocking(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		bool output,
+		uint16_t timeout)
+{
+	memset(pMaster->pchRxBuffer, '\0', MODBUS_RX_SIZE);
+	uint16_t rx_size = 5;
+	uint8_t function_code = MODBUS_FC_WR_DO;
+
+	uint16_t value = 0;
+	if(output){
+		value = 0xFF00;
+	}
+
+	pMaster->pchTxBuffer[0] = slave_addr;
+	pMaster->pchTxBuffer[1] = function_code;
+	pMaster->pchTxBuffer[2] = register_addr>>8;
+	pMaster->pchTxBuffer[3] = register_addr;
+	pMaster->pchTxBuffer[4] = value>>8;
+	pMaster->pchTxBuffer[5] = value;
+	uint16_t crc = CRC16(pMaster->pchTxBuffer, 6);
+	pMaster->pchTxBuffer[6] = crc&0xff;
+	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
+
+
+	HAL_UART_Transmit(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE, 10);
+	HAL_UART_Receive(pMaster->huart, pMaster->pchRxBuffer, rx_size, timeout);
+	return MODBUS_MASTER_response_check(pMaster, slave_addr);
+}
+
+
+
 void MODBUS_MASTER_write_single_holding_reg(
 		MODBUS_MASTER_InitTypeDef *pMaster,
 		uint8_t slave_addr,

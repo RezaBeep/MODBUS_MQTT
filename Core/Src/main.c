@@ -47,8 +47,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MODBUS_TX_SIZE	32
-#define MODBUS_RX_SIZE	128
+
 #define MODBUS_SLAVE_ADDR	1
 #define MODBUS_COIL_NB_POINTS	16
 #define MODBUS_REG_NB_POINTS	1
@@ -79,10 +78,10 @@ const UART_HandleTypeDef* PHUART_MODBUS = &huart2;
 const UART_HandleTypeDef* PHUART_EVENT = &huart3;
 
 
-const char* topic_coil = "MCU/COIL/";
-const char* topic_holding_reg = "MCU/HOLDING_REG/";
-const char* topic_discrete_input = "MCU/DISCRETE_INPUT/";
-const char* topic_input_reg = "MCU/INPUT_REG/";
+const char* topic_coil = "MCU/COIL/REG/";
+const char* topic_holding_reg = "MCU/WDATA/REG/";
+const char* topic_discrete_input = "MCU/DI/REG/";
+const char* topic_input_reg = "MCU/IR/REG/";
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -113,7 +112,7 @@ char modbus_rx_buff[MODBUS_RX_SIZE];
 char mqtt_payload_buff[MQTT_PAYLOAD_BUFF_SIZE];
 char mqtt_topic_buff[MQTT_TOPIC_BUFF_SIZE];
 char oled_buff[OLED_BUFF_SIZE];
-char event_rx_buff[SIM_EVENT_RX_SIZE];
+volatile char event_rx_buff[SIM_EVENT_RX_SIZE];
 
 uint16_t din_addr[MODBUS_REG_DIN_COUNT];
 uint16_t dout_addr[MODBUS_REG_DOUT_COUNT];
@@ -137,12 +136,19 @@ uint16_t modbus_input_reg_addr = 0;
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 
+
 bool setup();
 void modbus_res_handler_task(void* pvArgs);
 void modbus_read_task(void* pvArgs);
 void event_handler_task(void* pvArgs);
+void task_mqtt_conn_check(void* args);
+
+
 bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val);
-bool sim_restart();
+bool _sim_restart();
+void vSystemRst();
+
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -154,11 +160,8 @@ bool sim_restart();
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
 	if(GPIO_Pin == GPIO_PIN_12){
-		if(sim_reboot(&sim)){
-			oled_printl(&oled, "sim reboot");
-		}
-	}
 
+	}
 }
 
 
@@ -188,10 +191,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 
 
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){
-//	oled_printl(&oled, "rx event");
-
-
-
 	if(huart->Instance == PHUART_EVENT->Instance){
 		xHigherPriorityTaskWoken = pdFALSE;
 		xSemaphoreGiveFromISR(event_semphr, &xHigherPriorityTaskWoken);
@@ -226,7 +225,6 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -249,16 +247,18 @@ int main(void)
 
 setup:
   if(setup()){
-	  if(mqtt_sub(&mqtt_conn, "0", "SERVER/#")){
-	  	  oled_printl(&oled, "SUB DONE !");
-	  }
-	  else{
-		  oled_printl(&oled, "SUB FAILED !");
-	  }
+		if(mqtt_sub(&mqtt_conn, "0", "SERVER/#")){
+			oled_printl(&oled, "SUB DONE !");
+		}
+		else{
+			oled_printl(&oled, "SUB FAILED !");
+		}
 
-	  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
+		mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
 
-	  sim_event_listen(&sim_evt);
+		sim_event_listen(&sim_evt);
+
+
 //	  repeative_task();
 //	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
   }
@@ -280,11 +280,26 @@ setup:
   qmodbus_hr_val = xQueueCreate(1, sizeof(uint16_t));
   qmodbus_ir_val = xQueueCreate(1, sizeof(uint16_t));
 
-  xTaskCreate(event_handler_task, "event_task", 128, NULL, 3, NULL);
-  xTaskCreate(modbus_read_task, "read_task", 128, NULL, 1, NULL);
-  xTaskCreate(modbus_res_handler_task, "modbus_res_task", 128, NULL, 2, NULL);
-  /* We should never get here as control is now taken by the scheduler */
-  vTaskStartScheduler();
+
+	if(xTaskCreate(event_handler_task, "event_task", 128, NULL, 3, NULL) != pdPASS){
+		 oled_printl(&oled, "event task not created");
+		 return pdFALSE;
+	}
+	if(xTaskCreate(modbus_res_handler_task, "modbus_res_task", 128, NULL, 1, NULL) != pdPASS){
+		oled_printl(&oled, "res handler not created");
+		return pdFALSE;
+	}
+	if(xTaskCreate(modbus_read_task, "read_task", 128, NULL, 2, NULL) != pdPASS){
+		oled_printl(&oled, "read task not created");
+		return pdFALSE;
+	}
+	if(xTaskCreate(task_mqtt_conn_check, "conn_task", 128, NULL, 4, NULL) != pdPASS){
+		oled_printl(&oled, "mqtt task not created");
+		return pdFALSE;
+	}
+	/* We should never get here as control is now taken by the scheduler */
+	vTaskStartScheduler();
+
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -382,16 +397,15 @@ bool setup(){
 
 //	  HAL_Delay(5000);
 	  if(sim_gprs_connect(&sim)){
-	//	  sim_event_listen_once(&sim);
 		  uint8_t i = 0;
 		  oled_printl(&oled, "activatin app network");
 		  while(!(sim.app_network)){
 			  i++;
-			  HAL_Delay(5000);
+			  HAL_Delay(2000);
 			  oled_printl(&oled, "retrying app net");
 			  sim_gprs_connect(&sim);
 
-			  if(i>3){
+			  if(i>2){
 				  return false;
 			  }
 		  }
@@ -492,26 +506,30 @@ bool publish_reg_data(uint8_t reg_type, uint16_t reg_virt_addr, uint16_t reg_val
 
 void event_handler_task(void* pvArgs){
 
-	uint8_t* rx_buff;
+	volatile uint8_t rx_buff[50];
 	char topic_buff[50];
 	char payload_buff[10];
+
 	for(;;){
 		xSemaphoreTake(event_semphr, portMAX_DELAY);
 
-		rx_buff = sim_evt.pRxBuff;
+		strcpy(rx_buff, sim_evt.pRxBuff);
 		if(find_substr(rx_buff, "SMSUB")){
 			oled_printl(&oled, "SMSUB!");
 			sim_event_smsub_decode(&sim_evt, topic_buff, payload_buff);
 			sim_event_type_sub_t evt_type = sim_event_type_sub(topic_buff);
 			uint16_t reg_virt_addr;
 			uint16_t reg_val;
-			sim_event_reg_decode_val_addr(
-					topic_buff,
-					payload_buff,
-					&reg_virt_addr,
-					&reg_val);
 			switch(evt_type){
 				case SIM_EVENT_TYPE_SUB_SET_REG_ADDR:
+
+					sim_event_reg_decode_val_addr(
+							topic_buff,
+							payload_buff,
+							&reg_virt_addr,
+							&reg_val,
+							false);
+
 					if(find_substr(topic_buff, "DIN")){
 						modbus_reg_write_din_addr(reg_virt_addr, reg_val);
 						din_addr[reg_virt_addr] = reg_val;
@@ -526,12 +544,21 @@ void event_handler_task(void* pvArgs){
 					}
 					break;
 				case SIM_EVENT_TYPE_SUB_SET_REG_VALUE:
+
+					sim_event_reg_decode_val_addr(
+							topic_buff,
+							payload_buff,
+							&reg_virt_addr,
+							&reg_val,
+							true);
+
 					if(find_substr(topic_buff, "COIL")){
 						MODBUS_MASTER_write_single_coil(
 								&master,
 								MODBUS_SLAVE_ADDR,
 								dout_addr[reg_virt_addr],
 								reg_val);
+
 					}
 					if(find_substr(topic_buff, "WDATA")){
 						MODBUS_MASTER_write_single_holding_reg(
@@ -547,21 +574,21 @@ void event_handler_task(void* pvArgs){
 		}
 
 
-		strcpy(sim_evt.pRxBuff, "");
-		strcpy(topic_buff, "");
-		strcpy(payload_buff, "");
-		sim_event_listen(&sim_evt);
 
 
-		if(find_substr(rx_buff, "DEACTIVE")){
+
+		else if(find_substr(rx_buff, "DEACTIVE")){
 			// NETWORK DEACTIVATED
 			sim.app_network = false;
 			mqtt_conn.connected = false;
-			if(!sim_restart()){
-				// sim setup failed
-			}
+			vSystemRst();
+
 		}
 
+
+		strcpy(sim_evt.pRxBuff, "");
+		strcpy(topic_buff, "");
+		strcpy(payload_buff, "");
 		sim_event_listen(&sim_evt);
 	}
 }
@@ -579,6 +606,7 @@ void modbus_read_task(void* pvArgs){
 			publish_res = false;
 			reg_addr = din_addr[i];
 			if(reg_addr > 0){
+//				vTaskDelay(pdMS_TO_TICKS(100));
 				MODBUS_MASTER_read_discrete_input(
 						&master,
 						MODBUS_SLAVE_ADDR,
@@ -602,6 +630,7 @@ void modbus_read_task(void* pvArgs){
 			publish_res = false;
 			reg_addr = dout_addr[i];
 			if(reg_addr > 0){
+
 				MODBUS_MASTER_read_coils(
 						&master,
 						MODBUS_SLAVE_ADDR,
@@ -616,6 +645,7 @@ void modbus_read_task(void* pvArgs){
 						oled_printl(&oled, "failed to publish");
 					}
 				}
+
 			}
 			vTaskDelay(pdMS_TO_TICKS(100));
 		}
@@ -624,6 +654,7 @@ void modbus_read_task(void* pvArgs){
 			publish_res = false;
 			reg_addr = wdata_addr[i];
 			if(reg_addr > 0){
+
 				MODBUS_MASTER_read_holding_reg(
 						&master,
 						MODBUS_SLAVE_ADDR,
@@ -638,6 +669,7 @@ void modbus_read_task(void* pvArgs){
 						oled_printl(&oled, "failed to publish");
 					}
 				}
+
 			}
 			vTaskDelay(pdMS_TO_TICKS(100));
 		}
@@ -662,7 +694,7 @@ void modbus_res_handler_task(void* pvArgs){
 		fc = master.pchRxBuffer[1];
 		if(res_type == MODBUS_RES_OK){
 			data = master.pchRxBuffer[3]<<8 | master.pchRxBuffer[4];
-			oled_printl(&oled, "MODBUS_RES_OK");
+//			oled_printl(&oled, "MODBUS_RES_OK");
 			if(fc == MODBUS_FC_RD_DI){
 				xQueueSend(qmodbus_di_val, (void*)(&data), pdMS_TO_TICKS(100));
 			}
@@ -703,25 +735,52 @@ void modbus_res_handler_task(void* pvArgs){
 }
 
 
-bool sim_restart(){
+bool _sim_restart(){
 	  sim_reboot(&sim);
+	  HAL_NVIC_SystemReset();
 	  if(setup()){
-		  if(mqtt_sub(&mqtt_conn, "0", "SERVER/#")){
-		  	  oled_printl(&oled, "SUB DONE !");
-		  }
-		  else{
-			  oled_printl(&oled, "SUB FAILED !");
-		  }
-
-		  mqtt_publish_string(&mqtt_conn, "0", "0", "stm32", "connected");
-
-		  sim_event_listen(&sim_evt);
 		  return true;
 	//	  repeative_task();
 	//	  rtc_set_alarm_seconds_it(&hrtc, REPEAT_DELAY);
 	  }
 	  return false;
 }
+
+
+void task_mqtt_conn_check(void* args){
+	volatile fault_count = 0;
+	volatile uint8_t rx[60] = {0};
+	for(;;){
+		vTaskDelay(pdMS_TO_TICKS(10000));
+		HAL_UART_AbortReceive(mqtt_conn.sim->huart);
+		memset(rx, '\0', 60);
+		if(!mqtt_conn_status(&mqtt_conn, rx)){
+
+			fault_count++;
+			if(fault_count == 5){
+				oled_printl(&oled, "NOT CONNECTED!");
+				vSystemRst();
+			}
+
+		}
+		else{
+			fault_count = 0;
+		}
+
+	}
+}
+
+
+
+void vSystemRst(){
+	oled_printl(&oled, "SYSTEM RESTART!");
+	bool setup = _sim_restart();
+	while(!setup){
+		setup = _sim_restart();
+	}
+
+}
+
 /* USER CODE END 4 */
 
 /**

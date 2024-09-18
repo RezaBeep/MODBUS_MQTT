@@ -50,7 +50,7 @@ bool mqtt_connect(mqtt_conn_t* pMqttConn);
 bool mqtt_disconnect(mqtt_conn_t* pMqttConn);
 bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload);
 bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload);
-bool mqtt_conn_status(mqtt_conn_t* pMqttConn);
+bool mqtt_conn_status(mqtt_conn_t* pMqttConn, uint8_t* rx);
 bool mqtt_sub(mqtt_conn_t* pMqttConn, char* qos, char* topic);
 
 #endif /* INC_MQTT_H_ */

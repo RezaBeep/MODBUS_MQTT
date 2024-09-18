@@ -45,7 +45,13 @@ void sim_event_init(
 void sim_event_listen(sim_event_listener_t* psim_evt);
 void sim_event_smsub_decode(sim_event_listener_t* psim_evt, char* topic, char* payload);
 sim_event_type_sub_t sim_event_type_sub(char* topic);
-void sim_event_reg_decode_val_addr(char* topic, char* payload, uint16_t* pAddr, uint16_t* pVal);
+void sim_event_reg_decode_val_addr(
+		char* topic,
+		char* payload,
+		uint16_t* pAddr,
+		uint16_t* pVal,
+		bool hex_val);
+bool sim_event_mqtt_conn_status(sim_event_listener_t* psim_evt, sim_t* psim);
 
 
 #endif /* INC_SIM_EVENT_H_ */

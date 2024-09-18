@@ -121,7 +121,7 @@ bool sim_reboot(sim_t* psim){
 
 
 bool sim_report_error_enable(sim_t* psim){
-	if(at_write(psim->huart, sim_rx_buff, cmee, 5000, 1, "2")){
+	if(at_write_blocking(psim->huart, sim_rx_buff, cmee, 1000, 1, "2")){
 		psim->state = SIM_STATE_REPORT_ERROR_ENABLED;
 		return _sim_finish_operation();
 	}
@@ -160,7 +160,7 @@ bool sim_is_ready(sim_t* psim){
 
 bool sim_registered(sim_t* psim){
 	if(psim->state == SIM_STATE_FULL_FUNC){
-		if(at_read(psim->huart, sim_rx_buff, creg, 5000)){
+		if(at_read_blocking(psim->huart, sim_rx_buff, creg, 2000)){
 			if(find_substr(sim_rx_buff, "+CREG: 0,1")){
 				psim->state = SIM_STATE_CREG_OK;
 				return _sim_finish_operation();
@@ -177,7 +177,7 @@ bool sim_registered(sim_t* psim){
 
 bool sim_gprs_registered(sim_t* psim){
 	if(psim->state == SIM_STATE_CREG_OK){
-		if(at_read(psim->huart, sim_rx_buff, cgreg, 5000)){
+		if(at_read_blocking(psim->huart, sim_rx_buff, cgreg, 5000)){
 			if(find_substr(sim_rx_buff, "+CGREG: 0,1")){
 				psim->state = SIM_STATE_CGREG_OK;
 				return _sim_finish_operation();
@@ -231,12 +231,13 @@ bool sim_gprs_disconnect(sim_t* psim){
 
 
 bool sim_app_network_is_connected(sim_t* psim){
-	if(at_read(psim->huart, sim_rx_buff, cnact, 5000)){
+	if(at_read_blocking(psim->huart, sim_rx_buff, cnact, SIM_AT_MIN_TIMEOUT)){
 		if(find_substr(sim_rx_buff, "CNACT: 1")){
 			psim->app_network = true;
 			return _sim_finish_operation();
 		}
 	}
+	psim->app_network = false;
 	flush_buff(sim_rx_buff);
 	return false;
 }
