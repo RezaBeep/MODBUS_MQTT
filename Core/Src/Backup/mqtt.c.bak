@@ -9,6 +9,8 @@
 #include "oled.h"
 #include "i2c.h"
 #include "FreeRTOS.h"
+#include "string.h"
+#include "stdio.h"
 
 
 char* smconf = "SMCONF";
@@ -48,7 +50,7 @@ void mqtt_init(
 	pMqttConn->password = password;
 	pMqttConn->keep_time = keep_time;
 	pMqttConn->connected = false;
-	flush_buff(mqtt_rx_buff);
+	memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 
 
 }
@@ -60,9 +62,10 @@ bool mqtt_connect(mqtt_conn_t* pMqttConn){
 		if(at_write(pMqttConn->sim->huart, mqtt_rx_buff, smconf, MQTT_AT_MIN_TIMEOUT, 5, "\"URL\",\"", pMqttConn->url, "\",\"", pMqttConn->port, "\"")){
 			if(at_write(pMqttConn->sim->huart, mqtt_rx_buff, smconf, MQTT_AT_MIN_TIMEOUT, 2, "\"KEEPTIME\",", pMqttConn->keep_time)){
 
-				osDelay(2000);
+				HAL_Delay(2000);
 				if(at_execute_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smconn, 20000)>0){
 					pMqttConn->connected = true;
+					memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 					return true;
 				}
 				else{
@@ -70,9 +73,8 @@ bool mqtt_connect(mqtt_conn_t* pMqttConn){
 			}
 		}
 	}
-	else{
-		pMqttConn->connected = false;
-	}
+	memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
+	pMqttConn->connected = false;
 	return false;
 }
 
@@ -96,7 +98,7 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 		if(pMqttConn->connected){
 			uint8_t content_length = strlen(payload);
 			char content_len[5];
-			sprintf(content_len, "%d", content_length);
+			snprintf(content_len, 5, "%d", content_length);
 			if(at_write_blocking(
 						pMqttConn->sim->huart,
 						mqtt_rx_buff,
@@ -114,14 +116,16 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 				{
 					char msg[content_length+5];
 	//				sprintf(msg, "%s\x1A\r\n", payload);
-					sprintf(msg, "%s", payload);
+					snprintf(msg, content_length+5, "%s", payload);
 					HAL_UART_Transmit(pMqttConn->sim->huart, msg , strlen(msg), MQTT_AT_MIN_TIMEOUT);
-					sprintf(msg, "%c", (char) 26);
+					snprintf(msg, content_length+5, "%c", (char) 26);
 					HAL_UART_Transmit_IT(pMqttConn->sim->huart, msg , strlen(msg));
+					memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 					return true;
 			}
 		}
 	}
+	memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 	return false;
 }
 
@@ -131,17 +135,17 @@ bool mqtt_publish_string(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* 
 bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* topic, char* payload){
 	if(pMqttConn->sim->app_network){
 		if(pMqttConn->connected){
-			if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpubhex, MQTT_AT_MIN_TIMEOUT, 1, "1")){
+			if(at_write_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smpubhex, 200, 1, "1")){
 				uint8_t content_length = strlen(payload);
 				char true_payload[content_length+1];
 				char byte_size[4];
 				if(content_length % 2 != 0){
-					sprintf(true_payload, "%s0", payload);
-					sprintf(byte_size, "%d", (content_length+1)/2);
+					snprintf(true_payload, content_length+1, "%s0", payload);
+					snprintf(byte_size, 4, "%d", (content_length+1)/2);
 				}
 				else{
 					strcpy(true_payload, payload);
-					sprintf(byte_size, "%d", content_length/2);
+					snprintf(byte_size, 4, "%d", content_length/2);
 				}
 
 				if(pMqttConn->connected){
@@ -149,7 +153,7 @@ bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* top
 							pMqttConn->sim->huart,
 							mqtt_rx_buff,
 							smpub,
-							MQTT_AT_MIN_TIMEOUT,
+							500,
 							8,
 							"\"",
 							topic,
@@ -162,14 +166,16 @@ bool mqtt_publish_hex(mqtt_conn_t* pMqttConn, char* qos, char* retain, char* top
 					{
 
 
-						HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), MQTT_AT_MIN_TIMEOUT);
+						HAL_UART_Transmit(pMqttConn->sim->huart, true_payload , strlen(true_payload), 10);
 						HAL_UART_Transmit(pMqttConn->sim->huart, "\n" , 1, 200);
+						memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 						return true;
 					}
 				}
 			}
 		}
 	}
+	memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 	return false;
 }
 
@@ -189,10 +195,12 @@ bool mqtt_sub(mqtt_conn_t* pMqttConn, char* qos, char* topic){
 				topic,
 				"\",",
 				qos)){
+					memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 					return true;
 			}
 		}
 	}
+	memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 	return false;
 }
 
@@ -201,19 +209,15 @@ bool mqtt_sub(mqtt_conn_t* pMqttConn, char* qos, char* topic){
 
 
 
-bool mqtt_conn_status(mqtt_conn_t* pMqttConn){
+bool mqtt_conn_status(mqtt_conn_t* pMqttConn, uint8_t* rx){
+
 	if(pMqttConn->sim->app_network){
-		if(at_read(pMqttConn->sim->huart, mqtt_rx_buff, smstate, 5000)){
-			if(find_substr(mqtt_rx_buff, "1")){
-				pMqttConn->connected = true;
-				return true;
-			}
-			else{
-				pMqttConn->connected = false;
-			}
+		HAL_UART_Transmit(pMqttConn->sim->huart, "at+smstate?\r\n", 13, 10);
+		while(HAL_UART_Receive(pMqttConn->sim->huart, rx, 50, 100) != HAL_TIMEOUT);
+		if(find_substr(rx, "1")){
+			return true;
 		}
 	}
-	pMqttConn->connected = false;
 	return false;
 }
 

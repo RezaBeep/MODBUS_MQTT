@@ -23,6 +23,9 @@
 #define MODBUS_FC_WR_DO		5
 #define MODBUS_FC_WR_HR		6
 
+#define MODBUS_TX_SIZE	32
+#define MODBUS_RX_SIZE	128
+
 typedef enum{
 	MODBUS_RES_OK,
 	MODBUS_RES_EXCEPTION,
@@ -101,6 +104,11 @@ modbus_res_type MODBUS_MASTER_response_handler(
 		MODBUS_MASTER_exception *pException);
 
 
+modbus_res_type MODBUS_MASTER_response_check(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr);
+
+
 void MODBUS_MASTER_read_coils(
 		MODBUS_MASTER_InitTypeDef *master,
 		uint8_t slave_addr,
@@ -134,6 +142,14 @@ void MODBUS_MASTER_write_single_coil(
 		uint8_t slave_addr,
 		uint16_t register_addr,
 		bool output);
+
+
+modbus_res_type MODBUS_MASTER_write_single_coil_blocking(
+		MODBUS_MASTER_InitTypeDef *pMaster,
+		uint8_t slave_addr,
+		uint16_t register_addr,
+		bool output,
+		uint16_t timeout);
 
 
 

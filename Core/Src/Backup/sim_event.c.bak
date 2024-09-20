@@ -57,17 +57,25 @@ sim_event_type_sub_t sim_event_type_sub(char* topic){
 }
 
 
-void sim_event_reg_decode_val_addr(char* topic, char* payload, uint16_t* pAddr, uint16_t* pVal){
+void sim_event_reg_decode_val_addr(char* topic,
+		char* payload,
+		uint16_t* pAddr,
+		uint16_t* pVal,
+		bool hex_val)
+{
     char* reg_pos = strstr(topic, "REG");
     int reg_pos_len = strlen(reg_pos) - 5;
     char reg_pos2[reg_pos_len];
     strncpy(reg_pos2, reg_pos+4, reg_pos_len);
-    uint16_t pos = strtol(reg_pos2, (char**) NULL, 10);
-    uint16_t val = strtol(payload, (char**) NULL, 10);
-
-    (*pAddr) = pos;
-    (*pVal) = val;
+    (*pAddr) = strtol(reg_pos2, (char**) NULL, 10);
+    if(!hex_val){
+    	(*pVal) = strtol(payload, (char**) NULL, 10);
+    }
+    else{
+    	(*pVal) = strtol(payload, (char**) NULL, 16);
+    }
 }
+
 
 
 

@@ -63,7 +63,7 @@ bool mqtt_connect(mqtt_conn_t* pMqttConn){
 			if(at_write(pMqttConn->sim->huart, mqtt_rx_buff, smconf, MQTT_AT_MIN_TIMEOUT, 2, "\"KEEPTIME\",", pMqttConn->keep_time)){
 
 				HAL_Delay(2000);
-				if(at_execute_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smconn, 20000)>0){
+				if(at_execute_blocking(pMqttConn->sim->huart, mqtt_rx_buff, smconn, 15000)>0){
 					pMqttConn->connected = true;
 					memset(mqtt_rx_buff, '\0', MQTT_RX_BUFF_SIZE);
 					return true;

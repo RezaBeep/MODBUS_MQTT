@@ -27,6 +27,7 @@
 #include "usart.h"
 #include "gpio.h"
 #include "stdio.h"
+#include "iwdg.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -60,14 +61,13 @@
 #define MQTT_QOS	"0"
 #define MQTT_RETAIN		"0"
 
-#define MQTT_KEEPTIME	"60"
+#define MQTT_KEEPTIME	"120"
 #define MQTT_PAYLOAD_BUFF_SIZE	20
 #define MQTT_TOPIC_BUFF_SIZE	50
 #define MQTT_BROKER_ADDR	"5.198.179.50"
 #define MQTT_BROKER_PORT	"1883"
 #define MQTT_CLIENT_ID		"STM32_GATEWAY"
 
-#define REPEAT_DELAY	10
 
 #define OLED_BUFF_SIZE	15
 
@@ -234,6 +234,7 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
   oled_init(&oled, &hi2c1);
   sim_init(&sim, PHUART_SIM, "mtnirancell", "", "");
@@ -281,22 +282,24 @@ setup:
   qmodbus_ir_val = xQueueCreate(1, sizeof(uint16_t));
 
 
+	if(xTaskCreate(task_mqtt_conn_check, "conn_task", 128, NULL, 4, NULL) != pdPASS){
+		oled_printl(&oled, "conn task not created");
+		return pdFALSE;
+	}
 	if(xTaskCreate(event_handler_task, "event_task", 128, NULL, 3, NULL) != pdPASS){
 		 oled_printl(&oled, "event task not created");
 		 return pdFALSE;
-	}
-	if(xTaskCreate(modbus_res_handler_task, "modbus_res_task", 128, NULL, 1, NULL) != pdPASS){
-		oled_printl(&oled, "res handler not created");
-		return pdFALSE;
 	}
 	if(xTaskCreate(modbus_read_task, "read_task", 128, NULL, 2, NULL) != pdPASS){
 		oled_printl(&oled, "read task not created");
 		return pdFALSE;
 	}
-	if(xTaskCreate(task_mqtt_conn_check, "conn_task", 128, NULL, 4, NULL) != pdPASS){
-		oled_printl(&oled, "mqtt task not created");
+	if(xTaskCreate(modbus_res_handler_task, "modbus_res_task", 128, NULL, 1, NULL) != pdPASS){
+		oled_printl(&oled, "res handler not created");
 		return pdFALSE;
 	}
+
+
 	/* We should never get here as control is now taken by the scheduler */
 	vTaskStartScheduler();
 
@@ -359,44 +362,48 @@ void SystemClock_Config(void)
 
 
 bool setup(){
-	  oled_printl(&oled, "Please wait");
 	  oled_printl(&oled, "sending AT..");
 	  if(sim_test_at(&sim)){
 		  oled_printl(&oled, "AT OK!");
 	  }
+	  HAL_IWDG_Refresh(&hiwdg);
 	  while(sim.state < SIM_STATE_AT_OK){
 		  sim_test_at(&sim);
 	  }
-	  if(sim_report_error_enable(&sim)){
-		  oled_printl(&oled, "+CMEE=2");
+	  oled_printl(&oled, "+CMEE=2");
+	  HAL_IWDG_Refresh(&hiwdg);
+	  while(sim.state < SIM_STATE_REPORT_ERROR_ENABLED){
+		  sim_report_error_enable(&sim);
 	  }
-	  while(sim.state < SIM_STATE_REPORT_ERROR_ENABLED){}
-	  if(sim_is_ready(&sim)){
-		  oled_printl(&oled, "ready");
+	  while(sim.state < SIM_STATE_PIN_READY){
+		  sim_is_ready(&sim);
 	  }
-	  while(sim.state < SIM_STATE_PIN_READY){}
-	  if(sim_registered(&sim)){
-		  oled_printl(&oled, "registered");
+	  HAL_IWDG_Refresh(&hiwdg);
+	  oled_printl(&oled, "ready");
+	  while(sim.state < SIM_STATE_CREG_OK){
+		  sim_registered(&sim);
 	  }
-	  while(sim.state < SIM_STATE_CREG_OK){}
-	  if(sim_gprs_registered(&sim)){
-		  oled_printl(&oled, "gprs registered");
+	  HAL_IWDG_Refresh(&hiwdg);
+	  oled_printl(&oled, "registered");
+	  while(sim.state < SIM_STATE_CGREG_OK){
+		  sim_gprs_registered(&sim);
 	  }
-	  while(sim.state < SIM_STATE_CGREG_OK){}
-
+	  HAL_IWDG_Refresh(&hiwdg);
+	  oled_printl(&oled, "gprs registered");
 	  //mqtt disconnect
 	  if(!mqtt_disconnect(&mqtt_conn)){
 	  	  oled_printl(&oled, "broker disconnect error!");
-	   }
+	  }
 
 
 	  // gprs disconnect
 	  if(!sim_gprs_disconnect(&sim)){
 		  oled_printl(&oled, "gprs disconnected already!");
 	  }
-
+	  HAL_IWDG_Refresh(&hiwdg);
 //	  HAL_Delay(5000);
 	  if(sim_gprs_connect(&sim)){
+		  HAL_IWDG_Refresh(&hiwdg);
 		  uint8_t i = 0;
 		  oled_printl(&oled, "activatin app network");
 		  while(!(sim.app_network)){
@@ -404,7 +411,7 @@ bool setup(){
 			  HAL_Delay(2000);
 			  oled_printl(&oled, "retrying app net");
 			  sim_gprs_connect(&sim);
-
+			  HAL_IWDG_Refresh(&hiwdg);
 			  if(i>2){
 				  return false;
 			  }
@@ -413,6 +420,7 @@ bool setup(){
 
 		  oled_printl(&oled, "Connecting to broker");
 		  if(mqtt_connect(&mqtt_conn)){
+			  HAL_IWDG_Refresh(&hiwdg);
 			  oled_printl(&oled, "Connected to broker");
 			  return true;
 		  }
@@ -572,10 +580,6 @@ void event_handler_task(void* pvArgs){
 					break;
 			}
 		}
-
-
-
-
 
 		else if(find_substr(rx_buff, "DEACTIVE")){
 			// NETWORK DEACTIVATED
@@ -737,6 +741,7 @@ void modbus_res_handler_task(void* pvArgs){
 
 bool _sim_restart(){
 	  sim_reboot(&sim);
+	  HAL_Delay(5000);
 	  HAL_NVIC_SystemReset();
 	  if(setup()){
 		  return true;
@@ -748,9 +753,10 @@ bool _sim_restart(){
 
 
 void task_mqtt_conn_check(void* args){
-	volatile fault_count = 0;
+	volatile uint8_t fault_count = 0;
 	volatile uint8_t rx[60] = {0};
 	for(;;){
+		HAL_IWDG_Refresh(&hiwdg);
 		vTaskDelay(pdMS_TO_TICKS(10000));
 		HAL_UART_AbortReceive(mqtt_conn.sim->huart);
 		memset(rx, '\0', 60);
@@ -769,6 +775,7 @@ void task_mqtt_conn_check(void* args){
 
 	}
 }
+
 
 
 
