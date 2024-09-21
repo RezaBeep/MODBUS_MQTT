@@ -118,15 +118,7 @@ uint16_t din_addr[MODBUS_REG_DIN_COUNT];
 uint16_t dout_addr[MODBUS_REG_DOUT_COUNT];
 uint16_t wdata_addr[MODBUS_REG_WDATA_COUNT];
 
-bool coil_ready_to_send = false;
-bool discrete_in_ready_to_send = false;
-bool input_reg_ready_to_send = false;
-bool holding_reg_ready_to_send = false;
-MODBUS_MASTER_res* modbus_res;
-uint16_t modbus_coil_addr = 0;
-uint16_t modbus_holding_reg_addr = 0;
-uint16_t modbus_discrete_input_addr = 0;
-uint16_t modbus_input_reg_addr = 0;
+
 /* USER CODE BEGIN PV */
 
 

@@ -45,7 +45,7 @@ void MODBUS_MASTER_request(MODBUS_MASTER_InitTypeDef *pMaster, uint8_t slave_add
 	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
 
 
-	HAL_UART_Transmit_IT(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE);
+	modbus_transmit_485(pMaster);
 	HAL_UART_Receive_DMA(pMaster->huart, pMaster->pchRxBuffer, rx_size);
 }
 
@@ -190,7 +190,7 @@ void MODBUS_MASTER_write_single_coil(
 	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
 
 
-	HAL_UART_Transmit_IT(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE);
+	modbus_transmit_485(pMaster);
 	HAL_UARTEx_ReceiveToIdle_DMA(pMaster->huart, pMaster->pchRxBuffer, rx_size);
 }
 
@@ -223,7 +223,7 @@ modbus_res_type MODBUS_MASTER_write_single_coil_blocking(
 	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
 
 
-	HAL_UART_Transmit(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE, 10);
+	modbus_transmit_485(pMaster);
 	HAL_UART_Receive(pMaster->huart, pMaster->pchRxBuffer, rx_size, timeout);
 	return MODBUS_MASTER_response_check(pMaster, slave_addr);
 }
@@ -250,8 +250,16 @@ void MODBUS_MASTER_write_single_holding_reg(
 	pMaster->pchTxBuffer[7] = (crc>>8)&0xff;
 
 
-	HAL_UART_Transmit_IT(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE);
+	modbus_transmit_485(pMaster);
 	HAL_UARTEx_ReceiveToIdle_DMA(pMaster->huart, pMaster->pchRxBuffer, rx_size);
+}
+
+
+
+void modbus_transmit_485(MODBUS_MASTER_InitTypeDef* pMaster){
+	HAL_GPIO_WritePin(MODBUS_TX_EN_GPIO_Port, MODBUS_TX_EN_Pin, SET);
+	HAL_UART_Transmit(pMaster->huart, pMaster->pchTxBuffer, TX_SIZE, 20);
+	HAL_GPIO_WritePin(MODBUS_TX_EN_GPIO_Port, MODBUS_TX_EN_Pin, RESET);
 }
 
 

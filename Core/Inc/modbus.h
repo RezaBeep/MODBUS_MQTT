@@ -161,6 +161,9 @@ void MODBUS_MASTER_write_single_holding_reg(
 
 
 
+void modbus_transmit_485(MODBUS_MASTER_InitTypeDef* pMaster);
+
+
 
 
 

@@ -121,7 +121,7 @@ bool sim_reboot(sim_t* psim){
 
 
 bool sim_report_error_enable(sim_t* psim){
-	if(at_write_blocking(psim->huart, sim_rx_buff, cmee, 1000, 1, "2")){
+	if(at_write_blocking(psim->huart, sim_rx_buff, cmee, SIM_AT_MIN_TIMEOUT, 1, "2")){
 		psim->state = SIM_STATE_REPORT_ERROR_ENABLED;
 		return _sim_finish_operation();
 	}
